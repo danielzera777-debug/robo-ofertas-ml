@@ -34,7 +34,6 @@ def home():
         if not code_verifier:
             return "Erro: code_verifier não encontrado.", 400
 
-        # Troca o código pelo Access Token
         response = requests.post(
             "https://api.mercadolibre.com/oauth/token",
             data={
@@ -58,7 +57,6 @@ def home():
         if not access_token:
             return "Erro: Access Token não recebido.", 400
 
-        # Consulta a conta do Mercado Livre
         user_response = requests.get(
             "https://api.mercadolibre.com/users/me",
             headers={
@@ -68,30 +66,27 @@ def home():
         )
 
         if user_response.status_code != 200:
-            return (
-                "Erro ao consultar a conta: "
-                + user_response.text
-            ), 400
+            return f"Erro ao consultar conta: {user_response.text}", 400
 
         user_data = user_response.json()
 
         nickname = user_data.get("nickname", "usuário")
         user_id = user_data.get("id", "não informado")
 
+        # Guarda o token na sessão para os testes
+        session["access_token"] = access_token
+
         return f"""
         <!DOCTYPE html>
         <html>
-
         <head>
             <meta charset="UTF-8">
-            <title>Teste Mercado Livre</title>
+            <title>Robô Ofertas ML</title>
         </head>
 
         <body>
 
-            <h1>✅ API funcionando!</h1>
-
-            <h2>Conta conectada</h2>
+            <h1>✅ Mercado Livre conectado!</h1>
 
             <p>
                 Usuário:
@@ -99,47 +94,51 @@ def home():
             </p>
 
             <p>
-                ID da conta:
+                ID:
                 <strong>{user_id}</strong>
             </p>
 
             <hr>
 
-            <p>
-                ✅ OAuth funcionando
-            </p>
+            <h2>🔎 Buscar produtos</h2>
 
-            <p>
-                ✅ PKCE funcionando
-            </p>
+            <form action="/buscar" method="get">
 
-            <p>
-                ✅ Access Token obtido
-            </p>
+                <input
+                    type="text"
+                    name="q"
+                    placeholder="Digite um produto"
+                    style="
+                        padding:10px;
+                        width:250px;
+                        font-size:16px;
+                    "
+                    required
+                >
 
-            <p>
-                ✅ API respondeu corretamente
-            </p>
+                <button
+                    type="submit"
+                    style="
+                        padding:10px 20px;
+                        font-size:16px;
+                    "
+                >
+                    Buscar
+                </button>
 
-            <p>
-                Próximo passo: configurar a busca de produtos.
-            </p>
+            </form>
 
         </body>
-
         </html>
         """
 
-    # Verificação das variáveis
     if not CLIENT_ID:
         return "ML_CLIENT_ID não configurado no Render.", 500
 
     if not CLIENT_SECRET:
         return "ML_CLIENT_SECRET não configurado no Render.", 500
 
-    # -------------------------
     # PKCE
-    # -------------------------
 
     code_verifier = secrets.token_urlsafe(64)
 
@@ -194,6 +193,108 @@ def home():
 
     </html>
     """
+
+
+@app.route("/buscar")
+def buscar():
+
+    termo = request.args.get("q", "").strip()
+
+    if not termo:
+        return "Digite um produto para pesquisar.", 400
+
+    # Busca pública no Mercado Livre
+    response = requests.get(
+        "https://api.mercadolibre.com/sites/MLB/search",
+        params={
+            "q": termo,
+            "limit": 10,
+        },
+        timeout=30,
+    )
+
+    if response.status_code != 200:
+        return f"""
+        <h1>Erro na busca</h1>
+        <pre>{response.text}</pre>
+        """, response.status_code
+
+    data = response.json()
+
+    produtos = data.get("results", [])
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+
+    <head>
+        <meta charset="UTF-8">
+        <title>Busca - {termo}</title>
+    </head>
+
+    <body>
+
+    <h1>🔎 Resultados para: {termo}</h1>
+
+    <a href="/">
+        ← Voltar
+    </a>
+
+    <hr>
+    """
+
+    if not produtos:
+        html += "<h2>Nenhum produto encontrado.</h2>"
+
+    for produto in produtos:
+
+        titulo = produto.get("title", "Sem título")
+        preco = produto.get("price", "N/A")
+        link = produto.get("permalink", "#")
+        imagem = produto.get("thumbnail", "")
+
+        html += f"""
+        <div style="
+            border:1px solid #ddd;
+            border-radius:10px;
+            padding:15px;
+            margin:15px 0;
+            max-width:600px;
+        ">
+
+            <img
+                src="{imagem}"
+                style="
+                    width:150px;
+                    height:150px;
+                    object-fit:contain;
+                "
+            >
+
+            <h3>{titulo}</h3>
+
+            <p>
+                <strong>
+                    R$ {preco}
+                </strong>
+            </p>
+
+            <a
+                href="{link}"
+                target="_blank"
+            >
+                Ver anúncio
+            </a>
+
+        </div>
+        """
+
+    html += """
+    </body>
+    </html>
+    """
+
+    return html
 
 
 if __name__ == "__main__":
