@@ -1,5 +1,5 @@
 import os
-from flask import Flask, redirect
+from flask import Flask, redirect, request
 
 app = Flask(__name__)
 
@@ -9,7 +9,7 @@ REDIRECT_URI = "https://robo-ofertas-ml.onrender.com"
 @app.route("/")
 def home():
     if not CLIENT_ID:
-        return "ML_CLIENT_ID não configurado no Render.", 500
+        return "ML_CLIENT_ID não configurado.", 500
 
     auth_url = (
         "https://auth.mercadolivre.com.br/authorization"
@@ -19,19 +19,23 @@ def home():
     )
 
     return f"""
-    <html>
-        <head>
-            <title>Robô Ofertas ML</title>
-        </head>
-        <body>
-            <h1>🤖 Robô Ofertas ML</h1>
-            <p>Conecte sua conta do Mercado Livre:</p>
-            <a href="{auth_url}">
-                <button>Conectar Mercado Livre</button>
-            </a>
-        </body>
-    </html>
+    <h1>🤖 Robô Ofertas ML</h1>
+    <p>Conecte sua conta do Mercado Livre:</p>
+    <a href="{auth_url}">
+        <button>Conectar Mercado Livre</button>
+    </a>
     """
+
+@app.route("/oauth/callback")
+def callback():
+    code = request.args.get("code")
+
+    if not code:
+        error = request.args.get("error", "desconhecido")
+        return f"Erro na autorização: {error}", 400
+
+    return "✅ Mercado Livre autorizado! Código recebido."
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
+
