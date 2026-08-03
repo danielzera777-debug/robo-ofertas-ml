@@ -9,7 +9,6 @@ app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "chave-temporaria")
 
 CLIENT_ID = os.getenv("ML_CLIENT_ID")
-CLIENT_SECRET = os.getenv("ML_CLIENT_SECRET")
 
 REDIRECT_URI = "https://robo-ofertas-ml.onrender.com/"
 
@@ -40,7 +39,6 @@ def home():
     )
 
     return f"""
-    <!DOCTYPE html>
     <html>
     <head>
         <meta charset="UTF-8">
@@ -49,24 +47,26 @@ def home():
     <body>
         <h1>🤖 Robô Ofertas ML</h1>
         <p>Conecte sua conta do Mercado Livre:</p>
-
         <a href="{auth_url}">
-            <button style="
-                padding: 15px 25px;
-                font-size: 18px;
-                cursor: pointer;
-            ">
-                Conectar Mercado Livre
-            </button>
+            <button>Conectar Mercado Livre</button>
         </a>
     </body>
     </html>
     """
 
 
-@app.route("/")
+@app.route("/oauth/callback")
 def oauth_callback():
-    return "Callback"
+    code = request.args.get("code")
+    state = request.args.get("state")
+
+    if not code:
+        return "Erro: código de autorização não recebido.", 400
+
+    if state != session.get("state"):
+        return "Erro: state inválido.", 400
+
+    return "✅ Autorização recebida! PKCE funcionando."
 
 
 if __name__ == "__main__":
