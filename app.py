@@ -1,7 +1,12 @@
-
+import os
 from flask import Flask, jsonify
 
 app = Flask(__name__)
+
+AFILIADO_LINK = os.getenv(
+    "AFILIADO_LINK",
+    "https://www.mercadolivre.com.br/social/f20260214222746"
+)
 
 @app.route("/")
 def home():
@@ -13,7 +18,7 @@ def oferta():
         "produto": "Oferta de teste",
         "preco": "R$ 99,90",
         "desconto": "30%",
-        "link": "https://mercadolivre.com.br"
+        "link_afiliado": AFILIADO_LINK
     })
 
 if __name__ == "__main__":
