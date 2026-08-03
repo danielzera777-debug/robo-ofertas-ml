@@ -23,7 +23,7 @@ def home():
     code = request.args.get("code")
     state = request.args.get("state")
 
-    # Retorno do Mercado Livre
+    # Mercado Livre retornou com o código
     if code:
 
         if state != session.get("state"):
@@ -54,12 +54,11 @@ def home():
         token_data = response.json()
 
         access_token = token_data.get("access_token")
-        refresh_token = token_data.get("refresh_token")
 
         if not access_token:
-            return "Erro: Mercado Livre não retornou Access Token.", 400
+            return "Erro: Access Token não recebido.", 400
 
-        # Testa o token consultando a conta
+        # Consulta a conta
         user_response = requests.get(
             "https://api.mercadolibre.com/users/me",
             headers={
@@ -69,30 +68,80 @@ def home():
         )
 
         if user_response.status_code != 200:
-            return f"Token recebido, mas não foi possível consultar a conta: {user_response.text}", 400
+            return f"Erro ao consultar conta: {user_response.text}", 400
 
         user_data = user_response.json()
 
         nickname = user_data.get("nickname", "usuário")
 
-        return f"""
+        # Teste de busca de produtos
+        search_response = requests.get(
+            "https://api.mercadolibre.com/sites/MLB/search",
+            params={
+                "q": "celular",
+                "limit": 10,
+            },
+            headers={
+                "Authorization": f"Bearer {access_token}"
+            },
+            timeout=30,
+        )
+
+        if search_response.status_code != 200:
+            return f"Conta conectada, mas erro na busca: {search_response.text}", 400
+
+        search_data = search_response.json()
+
+        produtos = search_data.get("results", [])
+
+        html = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
-            <title>Mercado Livre conectado</title>
+            <title>Teste do Robô</title>
         </head>
+
         <body>
-            <h1>✅ Mercado Livre conectado!</h1>
 
-            <p>Conta: <strong>{nickname}</strong></p>
+        <h1>✅ Mercado Livre conectado!</h1>
 
-            <p>O Access Token foi obtido e a API respondeu corretamente.</p>
+        <p>Conta: <strong>{nickname}</strong></p>
 
-            <p>Agora podemos configurar o robô para buscar produtos e ofertas.</p>
+        <h2>🔎 Produtos encontrados</h2>
+
+        """
+
+        for produto in produtos:
+
+            titulo = produto.get("title", "Sem título")
+            preco = produto.get("price", "N/A")
+            link = produto.get("permalink", "#")
+
+            html += f"""
+            <div style="
+                border:1px solid #ddd;
+                padding:15px;
+                margin:10px 0;
+            ">
+
+                <strong>{titulo}</strong>
+
+                <p>Preço: R$ {preco}</p>
+
+                <a href="{link}" target="_blank">
+                    Ver produto
+                </a>
+
+            </div>
+            """
+
+        html += """
         </body>
         </html>
         """
+
+        return html
 
     if not CLIENT_ID:
         return "ML_CLIENT_ID não configurado no Render.", 500
@@ -100,7 +149,10 @@ def home():
     if not CLIENT_SECRET:
         return "ML_CLIENT_SECRET não configurado no Render.", 500
 
-    # Gera PKCE
+    # -------------------------
+    # PKCE
+    # -------------------------
+
     code_verifier = secrets.token_urlsafe(64)
 
     code_challenge = base64.urlsafe_b64encode(
@@ -129,12 +181,14 @@ def home():
     return f"""
     <!DOCTYPE html>
     <html>
+
     <head>
         <meta charset="UTF-8">
         <title>Robô Ofertas ML</title>
     </head>
 
     <body>
+
         <h1>🤖 Robô Ofertas ML</h1>
 
         <p>Conecte sua conta do Mercado Livre:</p>
@@ -147,10 +201,15 @@ def home():
                 Conectar Mercado Livre
             </button>
         </a>
+
     </body>
+
     </html>
     """
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(
+        host="0.0.0.0",
+        port=10000
+    )
