@@ -34,6 +34,7 @@ def home():
         if not code_verifier:
             return "Erro: code_verifier não encontrado.", 400
 
+        # Troca o código pelo Access Token
         response = requests.post(
             "https://api.mercadolibre.com/oauth/token",
             data={
@@ -57,6 +58,7 @@ def home():
         if not access_token:
             return "Erro: Access Token não recebido.", 400
 
+        # Consulta a conta do Mercado Livre
         user_response = requests.get(
             "https://api.mercadolibre.com/users/me",
             headers={
@@ -73,12 +75,13 @@ def home():
         nickname = user_data.get("nickname", "usuário")
         user_id = user_data.get("id", "não informado")
 
-        # Guarda o token na sessão para os testes
+        # Guarda o token na sessão
         session["access_token"] = access_token
 
         return f"""
         <!DOCTYPE html>
         <html>
+
         <head>
             <meta charset="UTF-8">
             <title>Robô Ofertas ML</title>
@@ -138,7 +141,9 @@ def home():
     if not CLIENT_SECRET:
         return "ML_CLIENT_SECRET não configurado no Render.", 500
 
+    # -------------------------
     # PKCE
+    # -------------------------
 
     code_verifier = secrets.token_urlsafe(64)
 
@@ -204,6 +209,7 @@ def buscar():
         return "Digite um produto para pesquisar.", 400
 
     # Busca pública no Mercado Livre
+    # Sem enviar o Access Token neste teste
     response = requests.get(
         "https://api.mercadolibre.com/sites/MLB/search",
         params={
