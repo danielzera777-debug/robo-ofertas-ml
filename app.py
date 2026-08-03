@@ -23,7 +23,7 @@ def home():
     code = request.args.get("code")
     state = request.args.get("state")
 
-    # Mercado Livre retornou com o código
+    # Retorno do Mercado Livre
     if code:
 
         if state != session.get("state"):
@@ -34,7 +34,7 @@ def home():
         if not code_verifier:
             return "Erro: code_verifier não encontrado.", 400
 
-        # Troca o código por Access Token
+        # Troca o código pelo Access Token
         response = requests.post(
             "https://api.mercadolibre.com/oauth/token",
             data={
@@ -58,7 +58,7 @@ def home():
         if not access_token:
             return "Erro: Access Token não recebido.", 400
 
-        # Consulta a conta
+        # Consulta a conta do Mercado Livre
         user_response = requests.get(
             "https://api.mercadolibre.com/users/me",
             headers={
@@ -68,81 +68,69 @@ def home():
         )
 
         if user_response.status_code != 200:
-            return f"Erro ao consultar conta: {user_response.text}", 400
+            return (
+                "Erro ao consultar a conta: "
+                + user_response.text
+            ), 400
 
         user_data = user_response.json()
 
         nickname = user_data.get("nickname", "usuário")
+        user_id = user_data.get("id", "não informado")
 
-        # Teste de busca de produtos
-        search_response = requests.get(
-            "https://api.mercadolibre.com/sites/MLB/search",
-            params={
-                "q": "celular",
-                "limit": 10,
-            },
-            headers={
-                "Authorization": f"Bearer {access_token}"
-            },
-            timeout=30,
-        )
-
-        if search_response.status_code != 200:
-            return f"Conta conectada, mas erro na busca: {search_response.text}", 400
-
-        search_data = search_response.json()
-
-        produtos = search_data.get("results", [])
-
-        html = f"""
+        return f"""
         <!DOCTYPE html>
         <html>
+
         <head>
             <meta charset="UTF-8">
-            <title>Teste do Robô</title>
+            <title>Teste Mercado Livre</title>
         </head>
 
         <body>
 
-        <h1>✅ Mercado Livre conectado!</h1>
+            <h1>✅ API funcionando!</h1>
 
-        <p>Conta: <strong>{nickname}</strong></p>
+            <h2>Conta conectada</h2>
 
-        <h2>🔎 Produtos encontrados</h2>
+            <p>
+                Usuário:
+                <strong>{nickname}</strong>
+            </p>
 
-        """
+            <p>
+                ID da conta:
+                <strong>{user_id}</strong>
+            </p>
 
-        for produto in produtos:
+            <hr>
 
-            titulo = produto.get("title", "Sem título")
-            preco = produto.get("price", "N/A")
-            link = produto.get("permalink", "#")
+            <p>
+                ✅ OAuth funcionando
+            </p>
 
-            html += f"""
-            <div style="
-                border:1px solid #ddd;
-                padding:15px;
-                margin:10px 0;
-            ">
+            <p>
+                ✅ PKCE funcionando
+            </p>
 
-                <strong>{titulo}</strong>
+            <p>
+                ✅ Access Token obtido
+            </p>
 
-                <p>Preço: R$ {preco}</p>
+            <p>
+                ✅ API respondeu corretamente
+            </p>
 
-                <a href="{link}" target="_blank">
-                    Ver produto
-                </a>
+            <p>
+                Próximo passo: configurar a busca de produtos.
+            </p>
 
-            </div>
-            """
-
-        html += """
         </body>
+
         </html>
         """
 
-        return html
-
+    # Verificação das variáveis
     if not CLIENT_ID:
         return "ML_CLIENT_ID não configurado no Render.", 500
 
