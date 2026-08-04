@@ -7,9 +7,6 @@ from urllib.parse import urlencode
 import os
 import html
 app = Flask(__name__)
-# =========================================================
-# CONFIGURAÇÕES
-# =========================================================
 app.secret_key = os.environ.get(
     "FLASK_SECRET_KEY",
     "troque-essa-chave"
@@ -18,7 +15,21 @@ CLIENT_ID = os.environ.get("ML_CLIENT_ID")
 CLIENT_SECRET = os.environ.get("ML_CLIENT_SECRET")
 REDIRECT_URI = "https://robo-ofertas-ml.onrender.com/"
 # =========================================================
-# PÁGINA INICIAL
+# FUNÇÕES
+# =========================================================
+def esc(valor):
+    return html.escape(str(valor or ""))
+def api_get(url, token, params=None):
+    return requests.get(
+        url,
+        headers={
+            "Authorization": f"Bearer {token}"
+        },
+        params=params or {},
+        timeout=30
+    )
+# =========================================================
+# TELA DE LOGIN
 # =========================================================
 @app.route("/")
 def home():
@@ -32,15 +43,11 @@ def home():
     # RETORNO DO MERCADO LIVRE
     # =====================================================
     if code:
-        saved_state = session.get("state")
-        if state != saved_state:
+        if state != session.get("state"):
             return "Erro: state inválido.", 400
         code_verifier = session.get("code_verifier")
         if not code_verifier:
             return "Erro: code_verifier não encontrado.", 400
-        # -------------------------------------------------
-        # TROCA CODE POR TOKEN
-        # -------------------------------------------------
         response = requests.post(
             "https://api.mercadolibre.com/oauth/token",
             data={
@@ -51,32 +58,29 @@ def home():
                 "redirect_uri": REDIRECT_URI,
                 "code_verifier": code_verifier,
             },
-            timeout=30,
+            timeout=30
         )
         if response.status_code != 200:
             return f"""
             <h1>Erro ao obter token</h1>
-            <pre>{html.escape(response.text)}</pre>
+            <pre>{esc(response.text)}</pre>
             """, 400
         token_data = response.json()
         access_token = token_data.get("access_token")
         refresh_token = token_data.get("refresh_token")
         if not access_token:
-            return "Erro: Access Token não recebido.", 400
-        # -------------------------------------------------
-        # TESTA USUÁRIO
-        # -------------------------------------------------
-        user_response = requests.get(
+            return "Access Token não recebido.", 400
+        # =================================================
+        # TESTAR CONTA
+        # =================================================
+        user_response = api_get(
             "https://api.mercadolibre.com/users/me",
-            headers={
-                "Authorization": f"Bearer {access_token}"
-            },
-            timeout=30,
+            access_token
         )
         if user_response.status_code != 200:
             return f"""
-            <h1>Erro ao consultar conta</h1>
-            <pre>{html.escape(user_response.text)}</pre>
+            <h1>Erro /users/me</h1>
+            <pre>{esc(user_response.text)}</pre>
             """, 400
         user_data = user_response.json()
         nickname = user_data.get(
@@ -85,29 +89,25 @@ def home():
         )
         user_id = user_data.get(
             "id",
-            "não informado"
+            ""
         )
-        # -------------------------------------------------
-        # SALVA TOKEN
-        # -------------------------------------------------
         session["access_token"] = access_token
         session["refresh_token"] = refresh_token
         session["user_id"] = user_id
-        return tela_principal(
+        return pagina_principal(
             nickname,
             user_id
         )
     # =====================================================
-    # JÁ ESTÁ CONECTADO?
+    # JÁ CONECTADO
     # =====================================================
-    access_token = session.get("access_token")
-    if access_token:
-        return tela_principal(
+    if session.get("access_token"):
+        return pagina_principal(
             "Mercado Livre",
             session.get("user_id", "")
         )
     # =====================================================
-    # GERAR PKCE
+    # PKCE
     # =====================================================
     code_verifier = secrets.token_urlsafe(64)
     code_challenge = base64.urlsafe_b64encode(
@@ -118,16 +118,13 @@ def home():
     state = secrets.token_urlsafe(32)
     session["code_verifier"] = code_verifier
     session["state"] = state
-    # =====================================================
-    # AUTORIZAÇÃO
-    # =====================================================
     params = {
         "response_type": "code",
         "client_id": CLIENT_ID,
         "redirect_uri": REDIRECT_URI,
         "state": state,
         "code_challenge": code_challenge,
-        "code_challenge_method": "S256",
+        "code_challenge_method": "S256"
     }
     auth_url = (
         "https://auth.mercadolivre.com.br/authorization?"
@@ -138,79 +135,62 @@ def home():
     <html lang="pt-BR">
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport"
-              content="width=device-width, initial-scale=1.0">
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1"
+        >
         <title>Achadosnews7</title>
         <style>
-            * {{
-                box-sizing: border-box;
-            }}
             body {{
-                margin: 0;
-                font-family: Arial, sans-serif;
-                background: #f5f5f5;
-                color: #222;
+                margin:0;
+                font-family:Arial;
+                background:#f5f5f5;
             }}
-            .container {{
-                max-width: 600px;
-                margin: 80px auto;
-                padding: 20px;
-            }}
-            .card {{
-                background: white;
-                border-radius: 18px;
-                padding: 30px;
-                text-align: center;
-                box-shadow:
-                    0 5px 25px rgba(0,0,0,0.08);
-            }}
-            h1 {{
-                margin-bottom: 10px;
-            }}
-            .logo {{
-                font-size: 42px;
-                margin-bottom: 10px;
+            .box {{
+                max-width:500px;
+                margin:80px auto;
+                background:white;
+                padding:30px;
+                border-radius:18px;
+                text-align:center;
             }}
             .btn {{
-                display: inline-block;
-                margin-top: 25px;
-                padding: 15px 25px;
-                border-radius: 10px;
-                background: #3483fa;
-                color: white;
-                text-decoration: none;
-                font-weight: bold;
+                display:inline-block;
+                padding:15px 25px;
+                background:#3483fa;
+                color:white;
+                text-decoration:none;
+                border-radius:10px;
+                font-weight:bold;
             }}
         </style>
     </head>
     <body>
-        <div class="container">
-            <div class="card">
-                <div class="logo">
-                    🤖
-                </div>
-                <h1>
-                    Achadosnews7
-                </h1>
-                <p>
-                    Conecte sua conta do Mercado Livre
-                    para começar.
-                </p>
-                <a
-                    class="btn"
-                    href="{auth_url}"
-                >
-                    Conectar Mercado Livre
-                </a>
-            </div>
+        <div class="box">
+            <h1>
+                🤖 Achadosnews7
+            </h1>
+            <p>
+                Conecte sua conta do Mercado Livre.
+            </p>
+            <br>
+            <a
+                class="btn"
+                href="{auth_url}"
+            >
+                Conectar Mercado Livre
+            </a>
         </div>
     </body>
     </html>
     """
 # =========================================================
-# TELA PRINCIPAL
+# PÁGINA PRINCIPAL
 # =========================================================
-def tela_principal(nickname, user_id):
+def pagina_principal(
+    nickname,
+    user_id
+):
     return f"""
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -218,76 +198,53 @@ def tela_principal(nickname, user_id):
         <meta charset="UTF-8">
         <meta
             name="viewport"
-            content="width=device-width, initial-scale=1.0"
+            content="width=device-width, initial-scale=1"
         >
         <title>Achadosnews7</title>
         <style>
-            * {{
-                box-sizing: border-box;
-            }}
             body {{
-                margin: 0;
-                font-family: Arial, sans-serif;
-                background: #f5f5f5;
-                color: #222;
+                margin:0;
+                font-family:Arial;
+                background:#f5f5f5;
             }}
             header {{
-                background: #3483fa;
-                color: white;
-                padding: 20px;
-            }}
-            header h1 {{
-                margin: 0;
-                font-size: 24px;
+                background:#3483fa;
+                color:white;
+                padding:20px;
             }}
             .container {{
-                max-width: 900px;
-                margin: auto;
-                padding: 20px;
+                max-width:900px;
+                margin:auto;
+                padding:20px;
             }}
-            .user {{
-                background: white;
-                padding: 15px;
-                border-radius: 12px;
-                margin-bottom: 20px;
+            .card {{
+                background:white;
+                padding:20px;
+                border-radius:15px;
+                margin-bottom:20px;
             }}
-            .search {{
-                background: white;
-                padding: 20px;
-                border-radius: 15px;
-                margin-bottom: 20px;
+            form {{
+                display:flex;
+                gap:10px;
             }}
-            .search form {{
-                display: flex;
-                gap: 10px;
+            input {{
+                flex:1;
+                padding:14px;
+                border:1px solid #ddd;
+                border-radius:10px;
+                font-size:16px;
             }}
-            .search input {{
-                flex: 1;
-                padding: 14px;
-                border: 1px solid #ddd;
-                border-radius: 10px;
-                font-size: 16px;
-            }}
-            .search button {{
-                border: 0;
-                border-radius: 10px;
-                padding: 14px 22px;
-                background: #3483fa;
-                color: white;
-                font-weight: bold;
-                cursor: pointer;
-            }}
-            .test {{
-                display: inline-block;
-                margin-top: 10px;
-                color: #3483fa;
+            button {{
+                padding:14px 22px;
+                border:0;
+                border-radius:10px;
+                background:#3483fa;
+                color:white;
+                font-weight:bold;
             }}
             @media(max-width:600px) {{
-                .search form {{
-                    flex-direction: column;
-                }}
-                .search button {{
-                    width: 100%;
+                form {{
+                    flex-direction:column;
                 }}
             }}
         </style>
@@ -301,50 +258,41 @@ def tela_principal(nickname, user_id):
             </div>
         </header>
         <div class="container">
-            <div class="user">
+            <div class="card">
                 <strong>
                     Mercado Livre conectado ✅
                 </strong>
-                <br><br>
-                Usuário:
-                <strong>
-                    {html.escape(str(nickname))}
-                </strong>
-                <br>
-                ID:
-                {html.escape(str(user_id))}
+                <p>
+                    Usuário: {esc(nickname)}
+                </p>
+                <p>
+                    ID: {esc(user_id)}
+                </p>
             </div>
-            <div class="search">
+            <div class="card">
                 <h2>
-                    🔎 Buscar produtos
+                    🔎 Procurar ofertas
                 </h2>
                 <form
                     action="/buscar"
                     method="get"
                 >
                     <input
-                        type="text"
                         name="q"
-                        placeholder="Ex: celular, relógio, tênis..."
+                        placeholder="Ex: celular"
                         required
                     >
-                    <button type="submit">
+                    <button>
                         Buscar
                     </button>
                 </form>
-                <a
-                    class="test"
-                    href="/teste-produtos"
-                >
-                    🧪 Testar API
-                </a>
             </div>
         </div>
     </body>
     </html>
     """
 # =========================================================
-# BUSCA
+# BUSCAR PRODUTOS
 # =========================================================
 @app.route("/buscar")
 def buscar():
@@ -353,104 +301,50 @@ def buscar():
         ""
     ).strip()
     if not termo:
-        return "Digite um produto para pesquisar.", 400
-    access_token = session.get(
-        "access_token"
-    )
-    if not access_token:
+        return "Digite um produto.", 400
+    token = session.get("access_token")
+    if not token:
         return """
-        <h1>❌ Mercado Livre não conectado</h1>
-        <a href="/">
-            Conectar Mercado Livre
-        </a>
+        <h1>Mercado Livre não conectado.</h1>
+        <a href="/">Voltar</a>
         """, 401
     # =====================================================
-    # API PRODUCTS SEARCH
+    # PRODUCTS SEARCH
     # =====================================================
-    response = requests.get(
+    response = api_get(
         "https://api.mercadolibre.com/products/search",
-        params={
+        token,
+        {
             "q": termo,
             "site_id": "MLB",
             "status": "active",
-            "limit": 20,
-        },
-        headers={
-            "Authorization":
-                f"Bearer {access_token}"
-        },
-        timeout=30,
+            "limit": 10
+        }
     )
     if response.status_code != 200:
         return f"""
-        <!DOCTYPE html>
-        <html>
-        <body>
-        <h1>❌ Erro na busca</h1>
+        <h1>Erro na busca</h1>
         <p>
-            Status da API:
-            <strong>
-                {response.status_code}
-            </strong>
+        Status: {response.status_code}
         </p>
         <pre>
-        {html.escape(response.text)}
+        {esc(response.text)}
         </pre>
-        <a href="/">
-            ← Voltar
-        </a>
-        </body>
-        </html>
+        <a href="/">Voltar</a>
         """, response.status_code
     data = response.json()
     produtos = data.get(
         "results",
         []
     )
-    total = data.get(
-        "paging",
-        {}
-    ).get(
-        "total",
-        0
-    )
-    # =====================================================
-    # HTML
-    # =====================================================
-    resultado_html = ""
+    cards = ""
     for produto in produtos:
-        produto_id = produto.get(
-            "id",
-            ""
+        product_id = produto.get(
+            "id"
         )
         nome = produto.get(
             "name",
-            "Produto sem nome"
-        )
-        nome = html.escape(
-            str(nome)
-        )
-        marca = "Não informado"
-        gtin = "Não informado"
-        for atributo in produto.get(
-            "attributes",
-            []
-        ):
-            atributo_id = atributo.get(
-                "id"
-            )
-            valor = atributo.get(
-                "value_name"
-            )
-            if atributo_id == "BRAND":
-                marca = valor or marca
-            if atributo_id == "GTIN":
-                gtin = valor or gtin
-        marca = html.escape(
-            str(marca)
-        )
-        gtin = html.escape(
-            str(gtin)
+            "Produto"
         )
         imagem = ""
         pictures = produto.get(
@@ -462,11 +356,63 @@ def buscar():
                 "url",
                 ""
             )
+        # =================================================
+        # BUSCAR ANÚNCIOS DO PRODUTO
+        # =================================================
+        anuncios_response = api_get(
+            "https://api.mercadolibre.com/products/"
+            + str(product_id)
+            + "/items",
+            token
+        )
+        anuncios = []
+        if anuncios_response.status_code == 200:
+            anuncios_data = anuncios_response.json()
+            anuncios = anuncios_data.get(
+                "results",
+                []
+            )
+        # =================================================
+        # PEGAR MELHOR PREÇO
+        # =================================================
+        melhor_preco = None
+        melhor_item = None
+        for item in anuncios:
+            preco = item.get(
+                "price"
+            )
+            if preco is None:
+                continue
+            try:
+                preco_num = float(preco)
+            except:
+                continue
+            if (
+                melhor_preco is None
+                or preco_num < melhor_preco
+            ):
+                melhor_preco = preco_num
+                melhor_item = item
+        # =================================================
+        # CARD
+        # =================================================
+        if melhor_preco is not None:
+            preco_html = f"""
+            <div class="preco">
+                R$ {melhor_preco:,.2f}
+            </div>
+            """.replace(",", "X").replace(".", ",").replace("X", ".")
+        else:
+            preco_html = """
+            <div class="sem-preco">
+                Preço não disponível
+            </div>
+            """
         if imagem:
             imagem_html = f"""
             <img
-                src="{html.escape(imagem)}"
-                alt="{nome}"
+                src="{esc(imagem)}"
+                alt="{esc(nome)}"
             >
             """
         else:
@@ -475,38 +421,54 @@ def buscar():
                 📦
             </div>
             """
-        resultado_html += f"""
+        link_html = ""
+        if melhor_item:
+            permalink = melhor_item.get(
+                "permalink"
+            )
+            if permalink:
+                link_html = f"""
+                <a
+                    class="btn"
+                    href="{esc(permalink)}"
+                    target="_blank"
+                >
+                    Ver anúncio
+                </a>
+                """
+        cards += f"""
         <div class="produto">
-            <div class="imagem">
+            <div class="foto">
                 {imagem_html}
             </div>
             <div class="info">
-                <div class="produto-id">
-                    {produto_id}
-                </div>
-                <h3>
-                    {nome}
-                </h3>
+                <small>
+                    {esc(product_id)}
+                </small>
+                <h2>
+                    {esc(nome)}
+                </h2>
+                {preco_html}
                 <p>
+                    Anúncios encontrados:
                     <strong>
-                        Marca:
+                        {len(anuncios)}
                     </strong>
-                    {marca}
                 </p>
-                <p>
-                    <strong>
-                        GTIN:
-                    </strong>
-                    {gtin}
-                </p>
-                <p class="catalogo">
-                    📦 Produto de catálogo
-                </p>
+                {link_html}
             </div>
         </div>
         """
+    if not cards:
+        cards = """
+        <div class="produto">
+            <h2>
+                Nenhum produto encontrado.
+            </h2>
+        </div>
+        """
     # =====================================================
-    # PÁGINA
+    # HTML FINAL
     # =====================================================
     return f"""
     <!DOCTYPE html>
@@ -515,105 +477,96 @@ def buscar():
         <meta charset="UTF-8">
         <meta
             name="viewport"
-            content="width=device-width, initial-scale=1.0"
+            content="width=device-width, initial-scale=1"
         >
         <title>
-            Busca - {html.escape(termo)}
+            Achadosnews7 - {esc(termo)}
         </title>
         <style>
-            * {{
-                box-sizing: border-box;
-            }}
             body {{
-                margin: 0;
-                font-family: Arial, sans-serif;
-                background: #f5f5f5;
-                color: #222;
+                margin:0;
+                font-family:Arial;
+                background:#f5f5f5;
+                color:#222;
             }}
             header {{
-                background: #3483fa;
-                color: white;
-                padding: 20px;
-            }}
-            header h1 {{
-                margin: 0;
-                font-size: 23px;
+                background:#3483fa;
+                color:white;
+                padding:20px;
             }}
             .container {{
-                max-width: 1000px;
-                margin: auto;
-                padding: 20px;
+                max-width:1000px;
+                margin:auto;
+                padding:20px;
             }}
             .top {{
-                background: white;
-                padding: 20px;
-                border-radius: 15px;
-                margin-bottom: 20px;
+                background:white;
+                padding:20px;
+                border-radius:15px;
+                margin-bottom:20px;
             }}
             .top a {{
-                color: #3483fa;
-                text-decoration: none;
-            }}
-            .top h2 {{
-                margin-bottom: 5px;
-            }}
-            .contador {{
-                color: #666;
+                color:#3483fa;
+                text-decoration:none;
             }}
             .produto {{
-                background: white;
-                border-radius: 15px;
-                padding: 18px;
-                margin-bottom: 15px;
-                display: flex;
-                gap: 20px;
+                background:white;
+                border-radius:15px;
+                padding:20px;
+                margin-bottom:18px;
+                display:flex;
+                gap:25px;
                 box-shadow:
-                    0 3px 12px rgba(0,0,0,0.06);
+                    0 3px 15px rgba(0,0,0,.06);
             }}
-            .imagem {{
-                width: 180px;
-                min-width: 180px;
-                height: 180px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
+            .foto {{
+                width:220px;
+                min-width:220px;
+                height:220px;
+                display:flex;
+                align-items:center;
+                justify-content:center;
             }}
-            .imagem img {{
-                max-width: 100%;
-                max-height: 100%;
-                object-fit: contain;
+            .foto img {{
+                max-width:100%;
+                max-height:100%;
+                object-fit:contain;
             }}
             .sem-imagem {{
-                font-size: 60px;
+                font-size:70px;
             }}
             .info {{
-                flex: 1;
+                flex:1;
             }}
-            .info h3 {{
-                margin-top: 8px;
-                margin-bottom: 15px;
-                font-size: 18px;
+            .info h2 {{
+                margin-top:8px;
             }}
-            .produto-id {{
-                color: #777;
-                font-size: 13px;
+            .preco {{
+                font-size:28px;
+                font-weight:bold;
+                color:#00a650;
+                margin:15px 0;
             }}
-            .catalogo {{
-                display: inline-block;
-                background: #e8f0fe;
-                color: #3483fa;
-                padding: 7px 10px;
-                border-radius: 8px;
-                font-size: 13px;
+            .sem-preco {{
+                color:#777;
+                margin:15px 0;
+            }}
+            .btn {{
+                display:inline-block;
+                padding:12px 18px;
+                background:#3483fa;
+                color:white;
+                text-decoration:none;
+                border-radius:9px;
+                font-weight:bold;
             }}
             @media(max-width:600px) {{
                 .produto {{
-                    flex-direction: column;
+                    flex-direction:column;
                 }}
-                .imagem {{
-                    width: 100%;
-                    min-width: 100%;
-                    height: 220px;
+                .foto {{
+                    width:100%;
+                    min-width:100%;
                 }}
             }}
         </style>
@@ -632,86 +585,16 @@ def buscar():
                     ← Voltar
                 </a>
                 <h2>
-                    🔎 {html.escape(termo)}
+                    🔎 {esc(termo)}
                 </h2>
-                <div class="contador">
-                    Encontrados:
-                    <strong>
-                        {total}
-                    </strong>
-                    produtos
-                </div>
             </div>
-            {resultado_html}
+            {cards}
         </div>
     </body>
     </html>
     """
 # =========================================================
-# TESTE DA API
-# =========================================================
-@app.route("/teste-produtos")
-def teste_produtos():
-    access_token = session.get(
-        "access_token"
-    )
-    if not access_token:
-        return """
-        <h1>❌ Token não encontrado</h1>
-        <a href="/">
-            Fazer login
-        </a>
-        """, 401
-    response = requests.get(
-        "https://api.mercadolibre.com/products/search",
-        params={
-            "q": "Celular",
-            "site_id": "MLB",
-            "status": "active",
-            "limit": 5,
-        },
-        headers={
-            "Authorization":
-                f"Bearer {access_token}"
-        },
-        timeout=30,
-    )
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta
-            name="viewport"
-            content="width=device-width, initial-scale=1"
-        >
-        <title>
-            Teste API
-        </title>
-    </head>
-    <body>
-        <h1>
-            🧪 Teste /products/search
-        </h1>
-        <p>
-            API:
-            <strong>
-                {response.status_code}
-            </strong>
-        </p>
-        <pre style="
-            white-space:pre-wrap;
-            word-wrap:break-word;
-        ">{html.escape(response.text)}</pre>
-        <br>
-        <a href="/">
-            ← Voltar
-        </a>
-    </body>
-    </html>
-    """
-# =========================================================
-# INICIAR
+# SERVIDOR
 # =========================================================
 if __name__ == "__main__":
     app.run(
