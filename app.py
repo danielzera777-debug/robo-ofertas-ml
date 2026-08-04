@@ -17,12 +17,16 @@ app = Flask(__name__)
 CLIENT_ID = os.getenv("ML_CLIENT_ID")
 CLIENT_SECRET = os.getenv("ML_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("ML_REDIRECT_URI")
-SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_hex(32))
+
+SECRET_KEY = os.getenv(
+    "SECRET_KEY",
+    secrets.token_hex(32)
+)
 
 app.secret_key = SECRET_KEY
 
 # ============================================================
-# SESSÃO
+# CONFIGURAÇÃO DA SESSÃO
 # ============================================================
 
 app.config["SESSION_COOKIE_SECURE"] = True
@@ -32,6 +36,10 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 # ============================================================
 # FORMATAÇÃO
 # ============================================================
+
+def escapar(valor):
+    return html.escape(str(valor or ""))
+
 
 def formatar_preco(valor):
 
@@ -54,13 +62,8 @@ def formatar_preco(valor):
         return "Preço indisponível"
 
 
-def escapar(valor):
-
-    return html.escape(str(valor or ""))
-
-
 # ============================================================
-# HEADERS
+# HEADERS DA API
 # ============================================================
 
 def headers_api():
@@ -92,28 +95,16 @@ def home():
     state = request.args.get("state")
 
     if not CLIENT_ID:
-
-        return (
-            "ML_CLIENT_ID não configurado no Render.",
-            500
-        )
+        return "ML_CLIENT_ID não configurado no Render.", 500
 
     if not CLIENT_SECRET:
-
-        return (
-            "ML_CLIENT_SECRET não configurado no Render.",
-            500
-        )
+        return "ML_CLIENT_SECRET não configurado no Render.", 500
 
     if not REDIRECT_URI:
-
-        return (
-            "ML_REDIRECT_URI não configurado no Render.",
-            500
-        )
+        return "ML_REDIRECT_URI não configurado no Render.", 500
 
     # ========================================================
-    # CALLBACK
+    # CALLBACK OAUTH
     # ========================================================
 
     if code:
@@ -124,15 +115,24 @@ def home():
 
             return """
             <h2>Erro: sessão expirada.</h2>
-            <p>Volte e conecte novamente sua conta.</p>
-            <a href="/">Voltar</a>
+
+            <p>
+                Volte para o início e conecte novamente.
+            </p>
+
+            <a href="/">
+                Voltar
+            </a>
             """, 400
 
         if state != saved_state:
 
             return """
             <h2>Erro: state inválido.</h2>
-            <a href="/">Voltar</a>
+
+            <a href="/">
+                Voltar
+            </a>
             """, 400
 
         code_verifier = session.get(
@@ -142,12 +142,17 @@ def home():
         if not code_verifier:
 
             return """
-            <h2>Erro: code_verifier não encontrado.</h2>
-            <a href="/">Voltar</a>
+            <h2>
+                Erro: code_verifier não encontrado.
+            </h2>
+
+            <a href="/">
+                Voltar
+            </a>
             """, 400
 
         # ====================================================
-        # TOKEN
+        # TROCA CODE POR TOKEN
         # ====================================================
 
         try:
@@ -172,8 +177,12 @@ def home():
 
             return f"""
             <h1>Erro de conexão</h1>
+
             <pre>{escapar(e)}</pre>
-            <a href="/">Voltar</a>
+
+            <a href="/">
+                Voltar
+            </a>
             """, 500
 
         if response.status_code != 200:
@@ -183,12 +192,18 @@ def home():
 
             <p>
                 Status:
-                <strong>{response.status_code}</strong>
+                <strong>
+                    {response.status_code}
+                </strong>
             </p>
 
-            <pre>{escapar(response.text)}</pre>
+            <pre>
+{escapar(response.text)}
+            </pre>
 
-            <a href="/">Voltar</a>
+            <a href="/">
+                Voltar
+            </a>
             """, 400
 
         try:
@@ -198,8 +213,13 @@ def home():
         except Exception:
 
             return """
-            <h2>Resposta inválida ao obter token.</h2>
-            <a href="/">Voltar</a>
+            <h2>
+                Resposta inválida ao obter token.
+            </h2>
+
+            <a href="/">
+                Voltar
+            </a>
             """, 400
 
         access_token = token_data.get(
@@ -209,33 +229,38 @@ def home():
         if not access_token:
 
             return """
-            <h2>Access Token não recebido.</h2>
-            <a href="/">Voltar</a>
+            <h2>
+                Access Token não recebido.
+            </h2>
+
+            <a href="/">
+                Voltar
+            </a>
             """, 400
 
         # ====================================================
-        # SALVAR SESSÃO
+        # SALVA TOKEN
         # ====================================================
 
         session["access_token"] = access_token
 
-        session["token_type"] = token_data.get(
-            "token_type"
+        session["refresh_token"] = token_data.get(
+            "refresh_token"
         )
 
         session["expires_in"] = token_data.get(
             "expires_in"
         )
 
-        session["refresh_token"] = token_data.get(
-            "refresh_token"
+        session["token_type"] = token_data.get(
+            "token_type"
         )
 
         session.pop("code_verifier", None)
         session.pop("state", None)
 
         # ====================================================
-        # TESTAR USUÁRIO
+        # CONSULTA USUÁRIO
         # ====================================================
 
         try:
@@ -244,16 +269,7 @@ def home():
 
                 "https://api.mercadolibre.com/users/me",
 
-                headers={
-                    "Authorization":
-                        f"Bearer {access_token}",
-
-                    "Accept":
-                        "application/json",
-
-                    "User-Agent":
-                        "Robo-Ofertas-ML/1.0",
-                },
+                headers=headers_api(),
 
                 timeout=30,
             )
@@ -261,26 +277,38 @@ def home():
         except requests.RequestException as e:
 
             return f"""
-            <h1>Erro de conexão com Mercado Livre</h1>
+            <h1>
+                Erro ao consultar Mercado Livre
+            </h1>
 
             <pre>{escapar(e)}</pre>
 
-            <a href="/">Voltar</a>
+            <a href="/">
+                Voltar
+            </a>
             """, 500
 
         if user_response.status_code != 200:
 
             return f"""
-            <h1>Erro ao consultar conta</h1>
+            <h1>
+                Erro ao consultar conta
+            </h1>
 
             <p>
                 Status:
-                <strong>{user_response.status_code}</strong>
+                <strong>
+                    {user_response.status_code}
+                </strong>
             </p>
 
-            <pre>{escapar(user_response.text)}</pre>
+            <pre>
+{escapar(user_response.text)}
+            </pre>
 
-            <a href="/">Voltar</a>
+            <a href="/">
+                Voltar
+            </a>
             """, 400
 
         try:
@@ -290,8 +318,13 @@ def home():
         except Exception:
 
             return """
-            <h2>Resposta inválida do usuário.</h2>
-            <a href="/">Voltar</a>
+            <h2>
+                Resposta inválida do usuário.
+            </h2>
+
+            <a href="/">
+                Voltar
+            </a>
             """, 400
 
         nickname = user_data.get(
@@ -333,15 +366,21 @@ def home():
     session["state"] = state
 
     # ========================================================
-    # AUTORIZAÇÃO
+    # URL DE AUTORIZAÇÃO
     # ========================================================
 
     params = {
+
         "response_type": "code",
+
         "client_id": CLIENT_ID,
+
         "redirect_uri": REDIRECT_URI,
+
         "state": state,
+
         "code_challenge": code_challenge,
+
         "code_challenge_method": "S256",
     }
 
@@ -364,7 +403,9 @@ def home():
             content="width=device-width, initial-scale=1.0"
         >
 
-        <title>Robô Ofertas ML</title>
+        <title>
+            Robô Ofertas ML
+        </title>
 
     </head>
 
@@ -375,10 +416,12 @@ def home():
         text-align:center;
     ">
 
-        <h1>🤖 Robô Ofertas ML</h1>
+        <h1>
+            🤖 Robô Ofertas ML
+        </h1>
 
         <p>
-            Conecte sua conta do Mercado Livre
+            Conecte sua conta do Mercado Livre.
         </p>
 
         <a href="{auth_url}">
@@ -391,7 +434,9 @@ def home():
                 background:#3483fa;
                 color:white;
             ">
+
                 🔐 Conectar Mercado Livre
+
             </button>
 
         </a>
@@ -406,7 +451,10 @@ def home():
 # PÁGINA PRINCIPAL
 # ============================================================
 
-def pagina_principal(nickname, user_id):
+def pagina_principal(
+    nickname,
+    user_id
+):
 
     return f"""
     <!DOCTYPE html>
@@ -422,43 +470,45 @@ def pagina_principal(nickname, user_id):
             content="width=device-width, initial-scale=1.0"
         >
 
-        <title>Robô Ofertas ML</title>
+        <title>
+            Robô Ofertas ML
+        </title>
 
         <style>
 
             body {{
-                font-family: Arial;
-                background: #f5f5f5;
-                margin: 0;
-                padding: 20px;
+                font-family:Arial;
+                background:#f5f5f5;
+                margin:0;
+                padding:20px;
             }}
 
             .container {{
-                max-width: 700px;
-                margin: auto;
-                background: white;
-                padding: 25px;
-                border-radius: 15px;
+                max-width:700px;
+                margin:auto;
+                background:white;
+                padding:25px;
+                border-radius:15px;
             }}
 
             input {{
-                width: 100%;
-                box-sizing: border-box;
-                padding: 14px;
-                font-size: 17px;
-                border: 1px solid #ccc;
-                border-radius: 8px;
-                margin-bottom: 10px;
+                width:100%;
+                box-sizing:border-box;
+                padding:14px;
+                font-size:17px;
+                border:1px solid #ccc;
+                border-radius:8px;
+                margin-bottom:10px;
             }}
 
             button {{
-                width: 100%;
-                padding: 14px;
-                font-size: 17px;
-                border: 0;
-                border-radius: 8px;
-                background: #3483fa;
-                color: white;
+                width:100%;
+                padding:14px;
+                font-size:17px;
+                border:0;
+                border-radius:8px;
+                background:#3483fa;
+                color:white;
             }}
 
             .link {{
@@ -476,7 +526,9 @@ def pagina_principal(nickname, user_id):
 
         <div class="container">
 
-            <h1>🤖 Robô Ofertas ML</h1>
+            <h1>
+                🤖 Robô Ofertas ML
+            </h1>
 
             <p>
                 ✅ Mercado Livre conectado!
@@ -489,44 +541,35 @@ def pagina_principal(nickname, user_id):
                 </strong>
             </p>
 
-            <p>
-                ID:
-                <strong>
-                    {escapar(user_id)}
-                </strong>
-            </p>
-
             <hr>
 
-            <h2>🔎 Buscar produtos</h2>
+            <h2>
+                🔎 Pesquisar produto
+            </h2>
 
-            <form action="/buscar" method="get">
+            <form
+                action="/buscar"
+                method="get"
+            >
 
                 <input
                     type="text"
                     name="q"
-                    placeholder="Ex: celular, tênis, relógio..."
+                    placeholder="Ex: iPhone 13, tênis Nike..."
                     required
                 >
 
                 <button type="submit">
-                    🔎 Buscar produtos
+                    🔎 Pesquisar
                 </button>
 
             </form>
 
             <a
                 class="link"
-                href="/teste-api"
-            >
-                🧪 Testar API
-            </a>
-
-            <a
-                class="link"
                 href="/diagnostico"
             >
-                🔧 Diagnóstico completo
+                🧪 Diagnóstico da API
             </a>
 
         </div>
@@ -538,7 +581,7 @@ def pagina_principal(nickname, user_id):
 
 
 # ============================================================
-# BUSCA PRINCIPAL
+# BUSCA / DOMAIN DISCOVERY
 # ============================================================
 
 @app.route("/buscar")
@@ -552,30 +595,29 @@ def buscar():
     if not termo:
 
         return """
-        <h2>Digite um produto para pesquisar.</h2>
-        <a href="/">Voltar</a>
-        """, 400
-
-    access_token = session.get(
-        "access_token"
-    )
-
-    if not access_token:
-
-        return """
-        <h1>❌ Mercado Livre não conectado</h1>
-
-        <p>
-            Conecte sua conta antes de pesquisar.
-        </p>
+        <h2>
+            Digite um produto.
+        </h2>
 
         <a href="/">
-            🔐 Conectar
+            Voltar
+        </a>
+        """, 400
+
+    if not session.get("access_token"):
+
+        return """
+        <h1>
+            ❌ Mercado Livre não conectado
+        </h1>
+
+        <a href="/">
+            🔐 Conectar Mercado Livre
         </a>
         """, 401
 
     # ========================================================
-    # DOMAIN DISCOVERY
+    # PREDITOR DE CATEGORIA
     # ========================================================
 
     url = (
@@ -602,35 +644,39 @@ def buscar():
     except requests.RequestException as e:
 
         return f"""
-        <h1>❌ Erro de conexão</h1>
+        <h1>
+            ❌ Erro de conexão
+        </h1>
 
-        <pre>{escapar(e)}</pre>
+        <pre>
+{escapar(e)}
+        </pre>
 
-        <a href="/">Voltar</a>
+        <a href="/">
+            Voltar
+        </a>
         """, 500
 
     if response.status_code != 200:
 
         return f"""
-        <h1>❌ Erro na busca</h1>
+        <h1>
+            ❌ Erro na busca
+        </h1>
 
         <p>
-            Status da API:
-            <strong>{response.status_code}</strong>
+            Status:
+            <strong>
+                {response.status_code}
+            </strong>
         </p>
 
-        <pre>{escapar(response.text)}</pre>
-
-        <hr>
-
-        <a href="/teste-api">
-            🧪 Testar outros endpoints
-        </a>
-
-        <br><br>
+        <pre>
+{escapar(response.text)}
+        </pre>
 
         <a href="/diagnostico">
-            🔧 Diagnóstico
+            🧪 Diagnóstico
         </a>
 
         <br><br>
@@ -642,20 +688,41 @@ def buscar():
 
     try:
 
-        dados = response.json()
+        resultados = response.json()
 
     except Exception:
 
         return """
-        <h1>❌ Resposta inválida</h1>
-        <a href="/">Voltar</a>
+        <h1>
+            ❌ Resposta inválida
+        </h1>
+
+        <a href="/">
+            Voltar
+        </a>
         """, 500
 
+    if not resultados:
+
+        return f"""
+        <h1>
+            🔎 {escapar(termo)}
+        </h1>
+
+        <p>
+            Nenhuma categoria encontrada.
+        </p>
+
+        <a href="/">
+            ← Nova pesquisa
+        </a>
+        """
+
     # ========================================================
-    # MOSTRAR RESULTADO DO DOMAIN DISCOVERY
+    # MOSTRA CATEGORIAS
     # ========================================================
 
-    html_page = f"""
+    pagina = f"""
     <!DOCTYPE html>
 
     <html>
@@ -670,7 +737,7 @@ def buscar():
         >
 
         <title>
-            Busca - {escapar(termo)}
+            {escapar(termo)}
         </title>
 
         <style>
@@ -682,7 +749,7 @@ def buscar():
             }}
 
             .container {{
-                max-width:900px;
+                max-width:800px;
                 margin:auto;
             }}
 
@@ -693,26 +760,30 @@ def buscar():
                 margin-bottom:15px;
             }}
 
-            .produto {{
+            .resultado {{
                 background:white;
                 padding:20px;
                 margin-bottom:15px;
                 border-radius:12px;
+                box-shadow:
+                    0 2px 8px rgba(0,0,0,.08);
             }}
 
-            .botao {{
-                display:inline-block;
-                background:#3483fa;
-                color:white;
-                padding:12px 18px;
-                border-radius:8px;
-                text-decoration:none;
-                margin-top:10px;
+            .categoria {{
+                font-size:20px;
+                font-weight:bold;
             }}
 
             .codigo {{
-                color:#555;
-                font-size:14px;
+                color:#666;
+                margin-top:8px;
+            }}
+
+            .atributo {{
+                background:#f5f5f5;
+                padding:8px;
+                border-radius:6px;
+                margin:5px 0;
             }}
 
         </style>
@@ -730,8 +801,10 @@ def buscar():
             </h1>
 
             <p>
-                Resultados encontrados:
-                <strong>{len(dados)}</strong>
+                Categorias encontradas:
+                <strong>
+                    {len(resultados)}
+                </strong>
             </p>
 
             <a href="/">
@@ -741,56 +814,40 @@ def buscar():
         </div>
     """
 
-    if not dados:
+    for resultado in resultados:
 
-        html_page += """
-        <div class="produto">
-
-            <h2>
-                Nenhum resultado encontrado.
-            </h2>
-
-            <p>
-                Tente outro nome de produto.
-            </p>
-
-        </div>
-        """
-
-    for item in dados:
-
-        domain_id = item.get(
+        domain_id = resultado.get(
             "domain_id",
             ""
         )
 
-        domain_name = item.get(
+        domain_name = resultado.get(
             "domain_name",
-            "Não informado"
+            ""
         )
 
-        category_id = item.get(
+        category_id = resultado.get(
             "category_id",
             ""
         )
 
-        category_name = item.get(
+        category_name = resultado.get(
             "category_name",
-            "Não informado"
+            ""
         )
 
-        atributos = item.get(
+        atributos = resultado.get(
             "attributes",
             []
         )
 
-        html_page += f"""
+        pagina += f"""
 
-        <div class="produto">
+        <div class="resultado">
 
-            <h2>
-                {escapar(domain_name)}
-            </h2>
+            <div class="categoria">
+                📦 {escapar(domain_name)}
+            </div>
 
             <p>
                 📂 Categoria:
@@ -799,23 +856,26 @@ def buscar():
                 </strong>
             </p>
 
-            <p class="codigo">
+            <div class="codigo">
                 Domain:
                 {escapar(domain_id)}
-            </p>
+            </div>
 
-            <p class="codigo">
+            <div class="codigo">
                 Categoria:
                 {escapar(category_id)}
-            </p>
+            </div>
 
         """
 
         if atributos:
 
-            html_page += """
-            <h3>Características</h3>
-            <ul>
+            pagina += """
+                <hr>
+
+                <strong>
+                    🔧 Características detectadas
+                </strong>
             """
 
             for atributo in atributos:
@@ -830,22 +890,27 @@ def buscar():
                     ""
                 )
 
-                html_page += f"""
-                <li>
-                    {escapar(nome)}:
-                    {escapar(valor)}
-                </li>
-                """
+                if valor:
 
-            html_page += """
-            </ul>
-            """
+                    pagina += f"""
 
-        html_page += """
+                    <div class="atributo">
+
+                        {escapar(nome)}:
+                        <strong>
+                            {escapar(valor)}
+                        </strong>
+
+                    </div>
+
+                    """
+
+        pagina += """
+
         </div>
         """
 
-    html_page += """
+    pagina += """
 
     </div>
 
@@ -854,20 +919,38 @@ def buscar():
     </html>
     """
 
-    return html_page
+    return pagina
 
 
 # ============================================================
-# TESTE DOS ENDPOINTS
+# DIAGNÓSTICO
 # ============================================================
 
-@app.route("/teste-api")
-def teste_api():
+@app.route("/diagnostico")
+def diagnostico():
 
-    endpoints = [
+    if not session.get("access_token"):
+
+        return """
+        <h1>
+            ❌ Conta não conectada
+        </h1>
+
+        <a href="/">
+            Voltar
+        </a>
+        """, 401
+
+    testes = [
 
         (
-            "1️⃣ Busca /sites/MLB/search",
+            "1️⃣ Usuário",
+            "https://api.mercadolibre.com/users/me",
+            {}
+        ),
+
+        (
+            "2️⃣ Busca antiga",
             "https://api.mercadolibre.com/sites/MLB/search",
             {
                 "q": "celular",
@@ -876,7 +959,7 @@ def teste_api():
         ),
 
         (
-            "2️⃣ Domain Discovery",
+            "3️⃣ Domain Discovery",
             "https://api.mercadolibre.com/sites/MLB/domain_discovery/search",
             {
                 "q": "celular",
@@ -885,20 +968,20 @@ def teste_api():
         ),
 
         (
-            "3️⃣ Categorias",
+            "4️⃣ Categorias",
             "https://api.mercadolibre.com/sites/MLB/categories",
             {}
         ),
 
     ]
 
-    resultado = []
+    blocos = []
 
-    for nome, url, params in endpoints:
+    for nome, url, params in testes:
 
         try:
 
-            response = requests.get(
+            r = requests.get(
 
                 url,
 
@@ -909,7 +992,7 @@ def teste_api():
                 timeout=30,
             )
 
-            resultado.append(f"""
+            blocos.append(f"""
 
             <div style="
                 background:#f8f8f8;
@@ -925,12 +1008,12 @@ def teste_api():
                 <p>
                     Status:
                     <strong>
-                        {response.status_code}
+                        {r.status_code}
                     </strong>
                 </p>
 
                 <pre>
-{escapar(response.text[:3000])}
+{escapar(r.text[:4000])}
                 </pre>
 
             </div>
@@ -939,7 +1022,7 @@ def teste_api():
 
         except Exception as e:
 
-            resultado.append(f"""
+            blocos.append(f"""
 
             <div>
 
@@ -970,271 +1053,9 @@ def teste_api():
             content="width=device-width, initial-scale=1.0"
         >
 
-        <title>Teste API</title>
-
-    </head>
-
-    <body style="
-        font-family:Arial;
-        background:#f5f5f5;
-        padding:20px;
-    ">
-
-    <div style="
-        max-width:900px;
-        margin:auto;
-        background:white;
-        padding:20px;
-        border-radius:12px;
-    ">
-
-        <h1>
-            🧪 Teste da API Mercado Livre
-        </h1>
-
-        <p>
-            A página testa os endpoints usando a conta conectada.
-        </p>
-
-        {"".join(resultado)}
-
-        <a href="/">
-            ← Voltar
-        </a>
-
-    </div>
-
-    </body>
-
-    </html>
-
-    """
-
-
-# ============================================================
-# DIAGNÓSTICO COMPLETO
-# ============================================================
-
-@app.route("/diagnostico")
-def diagnostico():
-
-    access_token = session.get(
-        "access_token"
-    )
-
-    if not access_token:
-
-        return """
-        <h1>❌ Sem Access Token</h1>
-
-        <p>
-            Conecte sua conta primeiro.
-        </p>
-
-        <a href="/">
-            Voltar
-        </a>
-        """, 401
-
-    resultado = []
-
-    # ========================================================
-    # USERS/ME
-    # ========================================================
-
-    try:
-
-        r_user = requests.get(
-
-            "https://api.mercadolibre.com/users/me",
-
-            headers=headers_api(),
-
-            timeout=30,
-        )
-
-        resultado.append(f"""
-
-        <div style="
-            background:#f8f8f8;
-            padding:15px;
-            margin-bottom:15px;
-            border-radius:10px;
-        ">
-
-            <h2>
-                1️⃣ /users/me
-            </h2>
-
-            <p>
-                Status:
-                <strong>
-                    {r_user.status_code}
-                </strong>
-            </p>
-
-            <pre>
-{escapar(r_user.text[:5000])}
-            </pre>
-
-        </div>
-
-        """)
-
-    except Exception as e:
-
-        resultado.append(f"""
-
-        <h2>
-            1️⃣ /users/me
-        </h2>
-
-        <pre>
-{escapar(e)}
-        </pre>
-
-        """)
-
-    # ========================================================
-    # SEARCH
-    # ========================================================
-
-    try:
-
-        r_search = requests.get(
-
-            "https://api.mercadolibre.com/sites/MLB/search",
-
-            params={
-                "q": "celular",
-                "limit": 5
-            },
-
-            headers=headers_api(),
-
-            timeout=30,
-        )
-
-        resultado.append(f"""
-
-        <div style="
-            background:#f8f8f8;
-            padding:15px;
-            margin-bottom:15px;
-            border-radius:10px;
-        ">
-
-            <h2>
-                2️⃣ /sites/MLB/search
-            </h2>
-
-            <p>
-                Status:
-                <strong>
-                    {r_search.status_code}
-                </strong>
-            </p>
-
-            <pre>
-{escapar(r_search.text[:5000])}
-            </pre>
-
-        </div>
-
-        """)
-
-    except Exception as e:
-
-        resultado.append(f"""
-
-        <h2>
-            2️⃣ /sites/MLB/search
-        </h2>
-
-        <pre>
-{escapar(e)}
-        </pre>
-
-        """)
-
-    # ========================================================
-    # DOMAIN DISCOVERY
-    # ========================================================
-
-    try:
-
-        r_domain = requests.get(
-
-            "https://api.mercadolibre.com/sites/MLB/domain_discovery/search",
-
-            params={
-                "q": "celular",
-                "limit": 5
-            },
-
-            headers=headers_api(),
-
-            timeout=30,
-        )
-
-        resultado.append(f"""
-
-        <div style="
-            background:#f8f8f8;
-            padding:15px;
-            margin-bottom:15px;
-            border-radius:10px;
-        ">
-
-            <h2>
-                3️⃣ /domain_discovery/search
-            </h2>
-
-            <p>
-                Status:
-                <strong>
-                    {r_domain.status_code}
-                </strong>
-            </p>
-
-            <pre>
-{escapar(r_domain.text[:5000])}
-            </pre>
-
-        </div>
-
-        """)
-
-    except Exception as e:
-
-        resultado.append(f"""
-
-        <h2>
-            3️⃣ /domain_discovery/search
-        </h2>
-
-        <pre>
-{escapar(e)}
-        </pre>
-
-        """)
-
-    return f"""
-
-    <!DOCTYPE html>
-
-    <html>
-
-    <head>
-
-        <meta charset="UTF-8">
-
-        <meta
-            name="viewport"
-            content="width=device-width, initial-scale=1.0"
-        >
-
-        <title>Diagnóstico ML</title>
+        <title>
+            Diagnóstico ML
+        </title>
 
     </head>
 
@@ -1257,10 +1078,10 @@ def diagnostico():
         </h1>
 
         <p>
-            O Access Token não é mostrado nesta página.
+            O Access Token não é exibido.
         </p>
 
-        {"".join(resultado)}
+        {"".join(blocos)}
 
         <a href="/">
             ← Voltar
