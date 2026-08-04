@@ -34,10 +34,12 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 # ============================================================
 
 def formatar_preco(valor):
+
     if valor is None:
         return "Preço indisponível"
 
     try:
+
         valor = float(valor)
 
         return (
@@ -48,10 +50,12 @@ def formatar_preco(valor):
         )
 
     except Exception:
+
         return "Preço indisponível"
 
 
 def escapar(valor):
+
     return html.escape(str(valor or ""))
 
 
@@ -69,13 +73,23 @@ def buscar_mercado_livre(termo, limit=50, offset=0):
         "offset": offset,
     }
 
+    access_token = session.get("access_token")
+
     headers = {
         "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent": "Robô-Ofertas-ML/1.0",
     }
 
-    # Primeiro tenta sem token porque a busca de anúncios
-    # é uma consulta pública.
+    # ========================================================
+    # USA O TOKEN DA CONTA CONECTADA
+    # ========================================================
+
+    if access_token:
+
+        headers["Authorization"] = (
+            f"Bearer {access_token}"
+        )
+
     try:
 
         response = requests.get(
@@ -85,37 +99,14 @@ def buscar_mercado_livre(termo, limit=50, offset=0):
             timeout=30,
         )
 
-        if response.status_code == 200:
-            return response
+        return response
 
-    except requests.RequestException:
-        pass
+    except requests.RequestException as e:
 
-    # Se a API exigir autenticação, tenta novamente
-    # utilizando o token salvo.
-    access_token = session.get("access_token")
+        print("ERRO DE CONEXÃO COM MERCADO LIVRE:")
+        print(str(e))
 
-    if access_token:
-
-        headers["Authorization"] = (
-            f"Bearer {access_token}"
-        )
-
-        try:
-
-            response = requests.get(
-                url,
-                params=params,
-                headers=headers,
-                timeout=30,
-            )
-
-            return response
-
-        except requests.RequestException:
-            return None
-
-    return None
+        return None
 
 
 # ============================================================
@@ -149,15 +140,24 @@ def home():
 
             return """
             <h2>Erro: sessão expirada.</h2>
-            <p>Volte e conecte novamente sua conta.</p>
-            <a href="/">Voltar</a>
+
+            <p>
+                Volte e conecte novamente sua conta.
+            </p>
+
+            <a href="/">
+                Voltar
+            </a>
             """, 400
 
         if state != saved_state:
 
             return """
             <h2>Erro: state inválido.</h2>
-            <a href="/">Voltar</a>
+
+            <a href="/">
+                Voltar
+            </a>
             """, 400
 
         code_verifier = session.get("code_verifier")
@@ -166,49 +166,111 @@ def home():
 
             return """
             <h2>Erro: code_verifier não encontrado.</h2>
-            <a href="/">Voltar</a>
+
+            <a href="/">
+                Voltar
+            </a>
             """, 400
 
-        response = requests.post(
+        # ====================================================
+        # TROCA CODE POR TOKEN
+        # ====================================================
 
-            "https://api.mercadolibre.com/oauth/token",
+        try:
 
-            data={
-                "grant_type": "authorization_code",
-                "client_id": CLIENT_ID,
-                "client_secret": CLIENT_SECRET,
-                "code": code,
-                "redirect_uri": REDIRECT_URI,
-                "code_verifier": code_verifier,
-            },
+            response = requests.post(
 
-            timeout=30,
-        )
+                "https://api.mercadolibre.com/oauth/token",
+
+                data={
+                    "grant_type": "authorization_code",
+                    "client_id": CLIENT_ID,
+                    "client_secret": CLIENT_SECRET,
+                    "code": code,
+                    "redirect_uri": REDIRECT_URI,
+                    "code_verifier": code_verifier,
+                },
+
+                timeout=30,
+            )
+
+        except requests.RequestException as e:
+
+            return f"""
+            <h1>Erro de conexão</h1>
+
+            <pre>{escapar(e)}</pre>
+
+            <a href="/">
+                Voltar
+            </a>
+            """, 500
 
         if response.status_code != 200:
 
             return f"""
             <h1>Erro ao obter token</h1>
 
-            <p>Status: {response.status_code}</p>
+            <p>
+                Status:
+                <strong>{response.status_code}</strong>
+            </p>
 
             <pre>{escapar(response.text)}</pre>
 
-            <a href="/">Voltar</a>
+            <a href="/">
+                Voltar
+            </a>
             """, 400
 
-        token_data = response.json()
+        try:
 
-        access_token = token_data.get("access_token")
+            token_data = response.json()
+
+        except Exception:
+
+            return """
+            <h2>Resposta inválida ao obter token.</h2>
+
+            <a href="/">
+                Voltar
+            </a>
+            """, 400
+
+        access_token = token_data.get(
+            "access_token"
+        )
 
         if not access_token:
 
             return """
             <h2>Access Token não recebido.</h2>
-            <a href="/">Voltar</a>
+
+            <a href="/">
+                Voltar
+            </a>
             """, 400
 
-        # Limpa dados PKCE
+        # ====================================================
+        # SALVA TOKEN
+        # ====================================================
+
+        session["access_token"] = access_token
+
+        # Guarda também informações úteis do token
+        session["token_type"] = token_data.get(
+            "token_type"
+        )
+
+        session["expires_in"] = token_data.get(
+            "expires_in"
+        )
+
+        session["user_id"] = token_data.get(
+            "user_id"
+        )
+
+        # Limpa PKCE
         session.pop("code_verifier", None)
         session.pop("state", None)
 
@@ -216,29 +278,68 @@ def home():
         # CONSULTA USUÁRIO
         # ====================================================
 
-        user_response = requests.get(
+        try:
 
-            "https://api.mercadolibre.com/users/me",
+            user_response = requests.get(
 
-            headers={
-                "Authorization":
-                    f"Bearer {access_token}"
-            },
+                "https://api.mercadolibre.com/users/me",
 
-            timeout=30,
-        )
+                headers={
+                    "Authorization":
+                        f"Bearer {access_token}",
+
+                    "Accept":
+                        "application/json",
+
+                    "User-Agent":
+                        "Robô-Ofertas-ML/1.0",
+                },
+
+                timeout=30,
+            )
+
+        except requests.RequestException as e:
+
+            return f"""
+            <h1>Erro de conexão com Mercado Livre</h1>
+
+            <pre>{escapar(e)}</pre>
+
+            <a href="/">
+                Voltar
+            </a>
+            """, 500
 
         if user_response.status_code != 200:
 
             return f"""
             <h1>Erro ao consultar conta</h1>
 
+            <p>
+                Status:
+                <strong>{user_response.status_code}</strong>
+            </p>
+
             <pre>{escapar(user_response.text)}</pre>
 
-            <a href="/">Voltar</a>
+            <a href="/">
+                Voltar
+            </a>
             """, 400
 
-        user_data = user_response.json()
+        try:
+
+            user_data = user_response.json()
+
+        except Exception:
+
+            return """
+            <h2>Resposta inválida do usuário.</h2>
+
+            <a href="/">
+                Voltar
+            </a>
+            """, 400
 
         nickname = user_data.get(
             "nickname",
@@ -250,7 +351,6 @@ def home():
             "não informado"
         )
 
-        session["access_token"] = access_token
         session["user_id"] = user_id
 
         return pagina_principal(
@@ -278,6 +378,10 @@ def home():
 
     session["code_verifier"] = code_verifier
     session["state"] = state
+
+    # ========================================================
+    # URL DE AUTORIZAÇÃO
+    # ========================================================
 
     params = {
         "response_type": "code",
@@ -404,6 +508,13 @@ def pagina_principal(nickname, user_id):
                 color: white;
             }}
 
+            .diagnostico {{
+                display: block;
+                margin-top: 20px;
+                text-decoration: none;
+                color: #3483fa;
+            }}
+
         </style>
 
     </head>
@@ -445,6 +556,13 @@ def pagina_principal(nickname, user_id):
 
             </form>
 
+            <a
+                class="diagnostico"
+                href="/diagnostico"
+            >
+                🧪 Diagnóstico da API
+            </a>
+
         </div>
 
     </body>
@@ -469,7 +587,10 @@ def buscar():
 
         return """
         <h2>Digite um produto para pesquisar.</h2>
-        <a href="/">Voltar</a>
+
+        <a href="/">
+            Voltar
+        </a>
         """, 400
 
     try:
@@ -485,11 +606,37 @@ def buscar():
 
         offset = 0
 
-    # Limite máximo por página
+    # Limite máximo
     limit = 50
 
-    # Evita offset negativo
+    # Evita valores negativos
     offset = max(0, offset)
+
+    # ========================================================
+    # VERIFICA TOKEN
+    # ========================================================
+
+    access_token = session.get(
+        "access_token"
+    )
+
+    if not access_token:
+
+        return """
+        <h1>❌ Mercado Livre não conectado</h1>
+
+        <p>
+            Conecte sua conta antes de fazer uma busca.
+        </p>
+
+        <a href="/">
+            🔐 Conectar Mercado Livre
+        </a>
+        """, 401
+
+    # ========================================================
+    # BUSCA
+    # ========================================================
 
     response = buscar_mercado_livre(
         termo,
@@ -506,31 +653,89 @@ def buscar():
             Não foi possível conectar ao Mercado Livre.
         </p>
 
-        <p>
-            Tente novamente.
-        </p>
-
         <a href="/">
             ← Voltar
         </a>
         """, 500
 
+    # ========================================================
+    # ERRO DA API
+    # ========================================================
+
     if response.status_code != 200:
 
         return f"""
-        <h1>❌ Erro na busca</h1>
+        <!DOCTYPE html>
 
-        <p>
-            Status da API:
-            <strong>{response.status_code}</strong>
-        </p>
+        <html>
 
-        <pre>{escapar(response.text)}</pre>
+        <head>
 
-        <a href="/">
-            ← Voltar
-        </a>
+            <meta charset="UTF-8">
+
+            <meta
+                name="viewport"
+                content="width=device-width, initial-scale=1.0"
+            >
+
+            <title>Erro Mercado Livre</title>
+
+        </head>
+
+        <body style="
+            font-family:Arial;
+            background:#f5f5f5;
+            padding:20px;
+        ">
+
+        <div style="
+            max-width:800px;
+            margin:auto;
+            background:white;
+            padding:25px;
+            border-radius:12px;
+        ">
+
+            <h1>❌ Erro na busca</h1>
+
+            <p>
+                Status da API:
+                <strong>{response.status_code}</strong>
+            </p>
+
+            <p>
+                Resposta do Mercado Livre:
+            </p>
+
+            <pre>{escapar(response.text)}</pre>
+
+            <hr>
+
+            <p>
+                Se o status for 403, abra a página de diagnóstico
+                para verificar token, usuário e acesso à API.
+            </p>
+
+            <a href="/diagnostico">
+                🧪 Abrir diagnóstico
+            </a>
+
+            <br><br>
+
+            <a href="/">
+                ← Voltar
+            </a>
+
+        </div>
+
+        </body>
+
+        </html>
         """, response.status_code
+
+    # ========================================================
+    # JSON
+    # ========================================================
 
     try:
 
@@ -704,11 +909,19 @@ def buscar():
         </div>
     """
 
+    # ========================================================
+    # NENHUM PRODUTO
+    # ========================================================
+
     if not produtos:
 
         html_page += """
         <div class="produto">
-            <h2>Nenhum produto encontrado.</h2>
+
+            <h2>
+                Nenhum produto encontrado.
+            </h2>
+
         </div>
         """
 
@@ -757,7 +970,10 @@ def buscar():
             "Não informada"
         )
 
-        # Localização
+        # ====================================================
+        # LOCALIZAÇÃO
+        # ====================================================
+
         endereco = produto.get(
             "address",
             {}
@@ -779,13 +995,18 @@ def buscar():
             else "Localização não informada"
         )
 
-        # Escapa textos
+        # ====================================================
+        # ESCAPE
+        # ====================================================
+
         titulo_html = escapar(titulo)
         link_html = escapar(link)
         imagem_html = escapar(imagem)
         categoria_html = escapar(categoria)
         condicao_html = escapar(condicao)
         localizacao_html = escapar(localizacao)
+        item_id_html = escapar(item_id)
+        vendidos_html = escapar(vendidos)
 
         preco_texto = formatar_preco(
             preco
@@ -811,7 +1032,7 @@ def buscar():
 
             <div class="vendidos">
                 🔥
-                <strong>{vendidos}</strong>
+                <strong>{vendidos_html}</strong>
                 vendidos
             </div>
 
@@ -832,7 +1053,7 @@ def buscar():
 
             <div class="info">
                 🆔
-                {escapar(item_id)}
+                {item_id_html}
             </div>
 
             <a
@@ -892,10 +1113,322 @@ def buscar():
     </div>
 
     </body>
+
     </html>
     """
 
     return html_page
+
+
+# ============================================================
+# DIAGNÓSTICO DO MERCADO LIVRE
+# ============================================================
+
+@app.route("/diagnostico")
+def diagnostico():
+
+    access_token = session.get(
+        "access_token"
+    )
+
+    if not access_token:
+
+        return """
+        <!DOCTYPE html>
+
+        <html>
+
+        <head>
+
+            <meta charset="UTF-8">
+
+            <meta
+                name="viewport"
+                content="width=device-width, initial-scale=1.0"
+            >
+
+            <title>Diagnóstico</title>
+
+        </head>
+
+        <body style="
+            font-family:Arial;
+            background:#f5f5f5;
+            padding:20px;
+        ">
+
+        <div style="
+            max-width:900px;
+            margin:auto;
+            background:white;
+            padding:20px;
+            border-radius:12px;
+        ">
+
+            <h1>❌ Sem Access Token</h1>
+
+            <p>
+                Conecte sua conta do Mercado Livre primeiro.
+            </p>
+
+            <a href="/">
+                Voltar
+            </a>
+
+        </div>
+
+        </body>
+
+        </html>
+        """, 401
+
+    resultado = []
+
+    # ========================================================
+    # 1 - USERS/ME
+    # ========================================================
+
+    try:
+
+        r_user = requests.get(
+
+            "https://api.mercadolibre.com/users/me",
+
+            headers={
+                "Authorization":
+                    f"Bearer {access_token}",
+
+                "Accept":
+                    "application/json",
+
+                "User-Agent":
+                    "Robô-Ofertas-ML/1.0",
+            },
+
+            timeout=30,
+        )
+
+        resultado.append(f"""
+        <div style="
+            background:#f8f8f8;
+            padding:15px;
+            border-radius:10px;
+            margin-bottom:20px;
+        ">
+
+            <h2>1️⃣ /users/me</h2>
+
+            <p>
+                Status:
+                <strong>
+                    {r_user.status_code}
+                </strong>
+            </p>
+
+            <pre>
+{escapar(r_user.text[:5000])}
+            </pre>
+
+        </div>
+        """)
+
+    except Exception as e:
+
+        resultado.append(f"""
+        <div>
+
+            <h2>1️⃣ /users/me</h2>
+
+            <pre>{escapar(e)}</pre>
+
+        </div>
+        """)
+
+    # ========================================================
+    # 2 - BUSCA SEM TOKEN
+    # ========================================================
+
+    try:
+
+        r_publica = requests.get(
+
+            "https://api.mercadolibre.com/sites/MLB/search",
+
+            params={
+                "q": "celular",
+                "limit": 5
+            },
+
+            headers={
+                "Accept":
+                    "application/json",
+
+                "User-Agent":
+                    "Robô-Ofertas-ML/1.0",
+            },
+
+            timeout=30,
+        )
+
+        resultado.append(f"""
+        <div style="
+            background:#f8f8f8;
+            padding:15px;
+            border-radius:10px;
+            margin-bottom:20px;
+        ">
+
+            <h2>2️⃣ Busca SEM token</h2>
+
+            <p>
+                Status:
+                <strong>
+                    {r_publica.status_code}
+                </strong>
+            </p>
+
+            <pre>
+{escapar(r_publica.text[:5000])}
+            </pre>
+
+        </div>
+        """)
+
+    except Exception as e:
+
+        resultado.append(f"""
+        <div>
+
+            <h2>2️⃣ Busca SEM token</h2>
+
+            <pre>{escapar(e)}</pre>
+
+        </div>
+        """)
+
+    # ========================================================
+    # 3 - BUSCA COM TOKEN
+    # ========================================================
+
+    try:
+
+        r_token = requests.get(
+
+            "https://api.mercadolibre.com/sites/MLB/search",
+
+            params={
+                "q": "celular",
+                "limit": 5
+            },
+
+            headers={
+                "Accept":
+                    "application/json",
+
+                "Authorization":
+                    f"Bearer {access_token}",
+
+                "User-Agent":
+                    "Robô-Ofertas-ML/1.0",
+            },
+
+            timeout=30,
+        )
+
+        resultado.append(f"""
+        <div style="
+            background:#f8f8f8;
+            padding:15px;
+            border-radius:10px;
+            margin-bottom:20px;
+        ">
+
+            <h2>3️⃣ Busca COM token</h2>
+
+            <p>
+                Status:
+                <strong>
+                    {r_token.status_code}
+                </strong>
+            </p>
+
+            <pre>
+{escapar(r_token.text[:5000])}
+            </pre>
+
+        </div>
+        """)
+
+    except Exception as e:
+
+        resultado.append(f"""
+        <div>
+
+            <h2>3️⃣ Busca COM token</h2>
+
+            <pre>{escapar(e)}</pre>
+
+        </div>
+        """)
+
+    # ========================================================
+    # RESULTADO
+    # ========================================================
+
+    return f"""
+    <!DOCTYPE html>
+
+    <html>
+
+    <head>
+
+        <meta charset="UTF-8">
+
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0"
+        >
+
+        <title>Diagnóstico Mercado Livre</title>
+
+    </head>
+
+    <body style="
+        font-family:Arial;
+        background:#f5f5f5;
+        padding:20px;
+    ">
+
+    <div style="
+        max-width:900px;
+        margin:auto;
+        background:white;
+        padding:20px;
+        border-radius:12px;
+    ">
+
+        <h1>
+            🧪 Diagnóstico Mercado Livre
+        </h1>
+
+        <p>
+            Não envie seu Access Token para ninguém.
+        </p>
+
+        {"".join(resultado)}
+
+        <hr>
+
+        <a href="/">
+            ← Voltar
+        </a>
+
+    </div>
+
+    </body>
+
+    </html>
+    """
 
 
 # ============================================================
@@ -951,7 +1484,9 @@ def teste_config():
 if __name__ == "__main__":
 
     app.run(
+
         host="0.0.0.0",
+
         port=int(
             os.getenv(
                 "PORT",
