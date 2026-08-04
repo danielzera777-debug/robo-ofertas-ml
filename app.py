@@ -384,22 +384,12 @@ def home():
 
     </a>
 
-    """# ============================================================
-# BUSCA INTELIGENTE DE PRODUTOS
-# ============================================================
-
-
-def buscar_produtos(
-
+    """def buscar_produtos(
         termo,
-
         categoria="todas"
-
 ):
 
-
     produtos = []
-
 
 
     if categoria == "todas":
@@ -408,51 +398,39 @@ def buscar_produtos(
             CATEGORIAS.values()
         )
 
-
     else:
 
-        categorias = [
+        if categoria in CATEGORIAS:
 
-            CATEGORIAS.get(
-                categoria
-            )
+            categorias = [
+                CATEGORIAS[categoria]
+            ]
 
-        ]
+        else:
+
+            categorias = []
 
 
 
     for cat in categorias:
 
 
-        if not cat:
-            continue
-
-
-
         resposta = requisicao_get(
-
 
             f"{API_BASE}/sites/{SITE_ID}/search",
 
-
             {
 
-
-                "q":
-                termo,
-
+                "q": termo,
 
                 "category":
                 cat["categoria"],
 
-
                 "sort":
                 "sold_quantity_desc",
 
-
                 "limit":
-                30
-
+                50
 
             }
 
@@ -468,6 +446,10 @@ def buscar_produtos(
 
         if resposta.status_code != 200:
 
+            print(
+                resposta.text
+            )
+
             continue
 
 
@@ -475,7 +457,6 @@ def buscar_produtos(
         try:
 
             dados = resposta.json()
-
 
         except:
 
@@ -489,7 +470,6 @@ def buscar_produtos(
         ):
 
 
-
             item["categoria_nome"] = (
                 cat["nome"]
             )
@@ -501,270 +481,7 @@ def buscar_produtos(
 
 
 
-    return produtos
-
-
-
-
-# ============================================================
-# ORGANIZAR MELHORES OPORTUNIDADES
-# ============================================================
-
-
-def analisar_produtos(
-
-        produtos,
-
-        margem=15
-
-):
-
-
-    oportunidades = []
-
-
-
-    vistos = set()
-
-
-
-    for produto in produtos:
-
-
-
-        item_id = produto.get(
-            "id"
-        )
-
-
-
-        if not item_id:
-
-            continue
-
-
-
-        if item_id in vistos:
-
-            continue
-
-
-
-        vistos.add(
-            item_id
-        )
-
-
-
-        preco = numero(
-
-            produto.get(
-                "price"
-            )
-
-        )
-
-
-
-        vendidos = produto.get(
-
-            "sold_quantity",
-
-            0
-
-        )
-
-
-
-        if preco <= 0:
-
-            continue
-
-
-
-
-        preco_revenda = (
-
-            preco *
-
-            (
-
-                1 +
-
-                margem / 100
-
-            )
-
-        )
-
-
-
-        lucro = (
-
-            preco_revenda -
-
-            preco
-
-        )
-
-
-
-        oportunidades.append({
-
-
-            "id":
-
-            item_id,
-
-
-
-            "titulo":
-
-            produto.get(
-
-                "title",
-
-                "Produto"
-
-            ),
-
-
-
-            "imagem":
-
-            produto.get(
-
-                "thumbnail",
-
-                ""
-
-            ),
-
-
-
-            "link":
-
-            produto.get(
-
-                "permalink",
-
-                ""
-
-            ),
-
-
-
-            "preco_compra":
-
-            preco,
-
-
-
-            "preco_venda":
-
-            preco_revenda,
-
-
-
-            "lucro":
-
-            lucro,
-
-
-
-            "vendidos":
-
-            vendidos,
-
-
-
-            "categoria":
-
-            produto.get(
-
-                "categoria_nome",
-
-                ""
-
-            ),
-
-
-
-            "estoque":
-
-            produto.get(
-
-                "available_quantity",
-
-                0
-
-            )
-
-        })
-
-
-
-
-    # Primeiro os que vendem mais,
-    # depois os mais baratos
-
-
-    oportunidades.sort(
-
-        key=lambda x:
-
-
-        (
-
-            x["vendidos"],
-
-            -x["preco_compra"]
-
-        ),
-
-
-        reverse=True
-
-    )
-
-
-
-    return oportunidades[:50]
-
-
-
-
-# ============================================================
-# BUSCAR PRODUTOS EM DESTAQUE
-# ============================================================
-
-
-def buscar_ofertas_destaque(
-
-        termo
-
-):
-
-
-    produtos = buscar_produtos(
-
-        termo
-
-    )
-
-
-
-    ofertas = analisar_produtos(
-
-        produtos,
-
-        MARGEM_PADRAO
-
-    )
-
-
-
-    return ofertas# ============================================================
+    return produtos# ============================================================
 # TELA PRINCIPAL APÓS LOGIN
 # ============================================================
 
