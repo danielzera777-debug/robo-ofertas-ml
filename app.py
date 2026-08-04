@@ -549,53 +549,27 @@ def painel():
 # ============================================================
 
 
-def buscar_produtos(
-    termo,
-    categoria="todas"
-):
+def buscar_produtos(termo, categoria):
+
+    params = {
+        "site_id": "MLB",
+        "q": termo,
+        "limit": 50,
+        "sort": "sold_quantity_desc"
+    }
 
 
-  params = {
-    "site_id": "MLB",
-    "q": termo,
-    "limit": 50,
-    "sort": "sold_quantity_desc"
-}
     if categoria in CATEGORIAS:
 
-        params["category"] = (
-            CATEGORIAS[categoria]
-        )
+        params["category"] = CATEGORIAS[categoria]
 
 
     resposta = requisicao_get(
-
-        f"{API_BASE}/sites/{SITE_ID}/search",
-
+        f"{API_BASE}/sites/MLB/search",
         params
-
     )
 
-
-    if resposta is None:
-
-        return []
-
-
-    if resposta.status_code != 200:
-
-        return []
-
-
-    try:
-
-        dados = resposta.json()
-
-        return dados.get(
-            "results",
-            []
-        )
-
+    return resposta.json().get("results", [])
 
     except:
 
