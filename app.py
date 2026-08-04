@@ -1,20 +1,30 @@
-import os
-import base64
-import hashlib
-import secrets
-from urllib.parse import urlencode
-
-import requests
 from flask import Flask, request, session
+import requests
+import secrets
+import hashlib
+import base64
+from urllib.parse import urlencode
+import os
 
 app = Flask(__name__)
 
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "chave-temporaria")
+# Chave usada para proteger a sessão
+app.secret_key = os.environ.get(
+    "FLASK_SECRET_KEY",
+    "chave-temporaria-altere-no-render"
+)
 
-CLIENT_ID = os.getenv("ML_CLIENT_ID")
-CLIENT_SECRET = os.getenv("ML_CLIENT_SECRET")
+# Credenciais do Mercado Livre
+CLIENT_ID = os.environ.get("ML_CLIENT_ID")
+CLIENT_SECRET = os.environ.get("ML_CLIENT_SECRET")
 
-REDIRECT_URI = "https://robo-ofertas-ml.onrender.com/"
+# IMPORTANTE:
+# Esta URL precisa ser exatamente igual à cadastrada
+# na aplicação do Mercado Livre.
+REDIRECT_URI = os.environ.get(
+    "ML_REDIRECT_URI",
+    "https://robo-ofertas-ml.onrender.com/"
+)
 
 
 @app.route("/")
@@ -23,18 +33,33 @@ def home():
     code = request.args.get("code")
     state = request.args.get("state")
 
-    # Retorno do Mercado Livre
+    # Verifica configurações antes de iniciar o OAuth
+    if not CLIENT_ID:
+        return "ML_CLIENT_ID não configurado no Render.", 500
+
+    if not CLIENT_SECRET:
+        return "ML_CLIENT_SECRET não configurado no Render.", 500
+
+    # --------------------------------------------------
+    # RETORNO DO MERCADO LIVRE COM O CODE
+    # --------------------------------------------------
+
     if code:
 
+        # Verifica o state
         if state != session.get("state"):
             return "Erro: state inválido.", 400
 
+        # Recupera o code_verifier usado no PKCE
         code_verifier = session.get("code_verifier")
 
         if not code_verifier:
             return "Erro: code_verifier não encontrado.", 400
 
-        # Troca o código pelo Access Token
+        # --------------------------------------------------
+        # TROCA O CODE PELO ACCESS TOKEN
+        # --------------------------------------------------
+
         response = requests.post(
             "https://api.mercadolibre.com/oauth/token",
             data={
@@ -49,16 +74,23 @@ def home():
         )
 
         if response.status_code != 200:
-            return f"Erro ao obter token: {response.text}", 400
+            return f"""
+            <h1>Erro ao obter token</h1>
+            <pre>{response.text}</pre>
+            """, 400
 
         token_data = response.json()
 
         access_token = token_data.get("access_token")
+        refresh_token = token_data.get("refresh_token")
 
         if not access_token:
             return "Erro: Access Token não recebido.", 400
 
-        # Consulta a conta do Mercado Livre
+        # --------------------------------------------------
+        # CONSULTA A CONTA
+        # --------------------------------------------------
+
         user_response = requests.get(
             "https://api.mercadolibre.com/users/me",
             headers={
@@ -68,15 +100,27 @@ def home():
         )
 
         if user_response.status_code != 200:
-            return f"Erro ao consultar conta: {user_response.text}", 400
+            return f"""
+            <h1>Erro ao consultar conta</h1>
+            <pre>{user_response.text}</pre>
+            """, 400
 
         user_data = user_response.json()
 
         nickname = user_data.get("nickname", "usuário")
         user_id = user_data.get("id", "não informado")
 
-        # Guarda o token na sessão
+        # --------------------------------------------------
+        # SALVA OS TOKENS NA SESSÃO
+        # --------------------------------------------------
+
         session["access_token"] = access_token
+
+        if refresh_token:
+            session["refresh_token"] = refresh_token
+
+        session["user_id"] = user_id
+        session["nickname"] = nickname
 
         return f"""
         <!DOCTYPE html>
@@ -135,20 +179,17 @@ def home():
         </html>
         """
 
-    if not CLIENT_ID:
-        return "ML_CLIENT_ID não configurado no Render.", 500
 
-    if not CLIENT_SECRET:
-        return "ML_CLIENT_SECRET não configurado no Render.", 500
-
-    # -------------------------
-    # PKCE
-    # -------------------------
+    # --------------------------------------------------
+    # INICIA O LOGIN NO MERCADO LIVRE
+    # --------------------------------------------------
 
     code_verifier = secrets.token_urlsafe(64)
 
     code_challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(code_verifier.encode()).digest()
+        hashlib.sha256(
+            code_verifier.encode()
+        ).digest()
     ).rstrip(b"=").decode()
 
     state = secrets.token_urlsafe(32)
@@ -183,7 +224,9 @@ def home():
 
         <h1>🤖 Robô Ofertas ML</h1>
 
-        <p>Conecte sua conta do Mercado Livre:</p>
+        <p>
+            Conecte sua conta do Mercado Livre:
+        </p>
 
         <a href="{auth_url}">
             <button style="
@@ -208,10 +251,36 @@ def buscar():
     if not termo:
         return "Digite um produto para pesquisar.", 400
 
-    # Busca pública no Mercado Livre
-    # Sem enviar o Access Token neste teste
+    # --------------------------------------------------
+    # RECUPERA O ACCESS TOKEN
+    # --------------------------------------------------
+
+    access_token = session.get("access_token")
+
+    if not access_token:
+        return """
+        <h1>Conta não conectada</h1>
+
+        <p>
+            Conecte sua conta do Mercado Livre novamente.
+        </p>
+
+        <a href="/">
+            Conectar Mercado Livre
+        </a>
+        """, 401
+
+    # --------------------------------------------------
+    # ENVIA O TOKEN PARA A API
+    # --------------------------------------------------
+
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+
     response = requests.get(
         "https://api.mercadolibre.com/sites/MLB/search",
+        headers=headers,
         params={
             "q": termo,
             "limit": 10,
@@ -219,11 +288,57 @@ def buscar():
         timeout=30,
     )
 
+    # --------------------------------------------------
+    # DIAGNÓSTICO
+    # --------------------------------------------------
+
+    print("================================")
+    print("TESTE API MERCADO LIVRE")
+    print("Endpoint: /sites/MLB/search")
+    print("Termo:", termo)
+    print("Status:", response.status_code)
+    print("Resposta:", response.text)
+    print("================================")
+
+    # --------------------------------------------------
+    # ERRO DA API
+    # --------------------------------------------------
+
     if response.status_code != 200:
+
         return f"""
-        <h1>Erro na busca</h1>
+        <!DOCTYPE html>
+        <html>
+
+        <head>
+            <meta charset="UTF-8">
+            <title>Erro na busca</title>
+        </head>
+
+        <body>
+
+        <h1>❌ Erro na busca</h1>
+
+        <p>
+            Status da API:
+            <strong>{response.status_code}</strong>
+        </p>
+
         <pre>{response.text}</pre>
+
+        <br>
+
+        <a href="/">
+            ← Voltar
+        </a>
+
+        </body>
+        </html>
         """, response.status_code
+
+    # --------------------------------------------------
+    # PROCESSA RESULTADOS
+    # --------------------------------------------------
 
     data = response.json()
 
@@ -236,6 +351,36 @@ def buscar():
     <head>
         <meta charset="UTF-8">
         <title>Busca - {termo}</title>
+
+        <style>
+
+            body {{
+                font-family: Arial, sans-serif;
+                max-width: 800px;
+                margin: auto;
+                padding: 20px;
+            }}
+
+            .produto {{
+                border: 1px solid #ddd;
+                border-radius: 10px;
+                padding: 15px;
+                margin: 15px 0;
+            }}
+
+            .produto img {{
+                width: 150px;
+                height: 150px;
+                object-fit: contain;
+            }}
+
+            .preco {{
+                font-size: 20px;
+                font-weight: bold;
+            }}
+
+        </style>
+
     </head>
 
     <body>
@@ -250,39 +395,49 @@ def buscar():
     """
 
     if not produtos:
-        html += "<h2>Nenhum produto encontrado.</h2>"
+
+        html += """
+        <h2>
+            Nenhum produto encontrado.
+        </h2>
+        """
 
     for produto in produtos:
 
-        titulo = produto.get("title", "Sem título")
-        preco = produto.get("price", "N/A")
-        link = produto.get("permalink", "#")
-        imagem = produto.get("thumbnail", "")
+        titulo = produto.get(
+            "title",
+            "Sem título"
+        )
+
+        preco = produto.get(
+            "price",
+            "N/A"
+        )
+
+        link = produto.get(
+            "permalink",
+            "#"
+        )
+
+        imagem = produto.get(
+            "thumbnail",
+            ""
+        )
 
         html += f"""
-        <div style="
-            border:1px solid #ddd;
-            border-radius:10px;
-            padding:15px;
-            margin:15px 0;
-            max-width:600px;
-        ">
+        <div class="produto">
 
             <img
                 src="{imagem}"
-                style="
-                    width:150px;
-                    height:150px;
-                    object-fit:contain;
-                "
+                alt="{titulo}"
             >
 
-            <h3>{titulo}</h3>
+            <h3>
+                {titulo}
+            </h3>
 
-            <p>
-                <strong>
-                    R$ {preco}
-                </strong>
+            <p class="preco">
+                R$ {preco}
             </p>
 
             <a
@@ -304,6 +459,7 @@ def buscar():
 
 
 if __name__ == "__main__":
+
     app.run(
         host="0.0.0.0",
         port=10000
