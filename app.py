@@ -615,96 +615,60 @@ def buscar_produtos(
     except:
 
         return []
+def montar_oferta(produto, margem):
 
+    preco = numero(
+        produto.get("price")
+    )
+
+    if preco <= 0:
+        return None
+
+
+    preco_venda = preco * (
+        1 + margem / 100
+    )
+
+
+    lucro = preco_venda - preco
+
+
+    return {
+
+        "id": produto.get("id"),
+
+        "titulo": produto.get(
+            "title",
+            "Produto"
+        ),
+
+        "imagem": produto.get(
+            "thumbnail"
+        ),
+
+        "preco": preco,
+
+        "venda": preco_venda,
+
+        "lucro": lucro,
+
+        "link": produto.get(
+            "permalink",
+            ""
+        ),
+
+        "vendidos": produto.get(
+            "sold_quantity",
+            0
+        )
+
+    }
 
 
 # ============================================================
 # CALCULAR OFERTA
 # ============================================================
 
-
-def montar_oferta(
-    produto,
-    margem
-):
-
-
-    preco = numero(
-        produto.get(
-            "price"
-        )
-    )
-
-
-    if preco <= 0:
-
-        return None
-
-
-    preco_venda = (
-
-        preco *
-
-        (
-            1 +
-            margem / 100
-        )
-
-    )
-
-
-    lucro = (
-
-        preco_venda -
-        preco
-
-    )
-
-
-    return {
-
-
-        "id":
-        produto.get(
-            "id"
-        ),
-
-
-        "titulo":
-        produto.get(
-            "title"
-        ),
-
-
-        "imagem":
-        produto.get(
-            "thumbnail"
-        ),
-
-
-        "preco":
-        preco,
-
-
-        "venda":
-        preco_venda,
-
-
-        "lucro":
-        lucro,
-
-
-        "link":
-        produto.get(
-            "permalink"
-        ),
-
-
-        "vendidos":
-        produto.get(
-            "sold_quantity",
-            0
-        )
 
 
     }# ============================================================
