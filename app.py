@@ -31,9 +31,9 @@ def home():
     if not CLIENT_SECRET:
         return "ML_CLIENT_SECRET não configurado no Render.", 500
 
-    # -----------------------------------------
+    # ==========================================
     # RETORNO DO MERCADO LIVRE
-    # -----------------------------------------
+    # ==========================================
 
     if code:
 
@@ -44,8 +44,6 @@ def home():
 
         if not code_verifier:
             return "Erro: code_verifier não encontrado.", 400
-
-        # Troca CODE por ACCESS TOKEN
 
         response = requests.post(
             "https://api.mercadolibre.com/oauth/token",
@@ -74,7 +72,9 @@ def home():
         if not access_token:
             return "Erro: Access Token não recebido.", 400
 
-        # Consulta conta
+        # ==========================================
+        # TESTE DA CONTA
+        # ==========================================
 
         user_response = requests.get(
             "https://api.mercadolibre.com/users/me",
@@ -102,7 +102,7 @@ def home():
             "não informado"
         )
 
-        # Salva token
+        # Guarda os tokens
 
         session["access_token"] = access_token
 
@@ -123,66 +123,72 @@ def home():
 
         <body>
 
-            <h1>✅ Mercado Livre conectado!</h1>
+        <h1>✅ Mercado Livre conectado!</h1>
 
-            <p>
-                Usuário:
-                <strong>{nickname}</strong>
-            </p>
+        <p>
+            Usuário:
+            <strong>{nickname}</strong>
+        </p>
 
-            <p>
-                ID:
-                <strong>{user_id}</strong>
-            </p>
+        <p>
+            ID:
+            <strong>{user_id}</strong>
+        </p>
 
-            <hr>
+        <hr>
 
-            <h2>🧪 Teste da API</h2>
+        <h2>🧪 Testes</h2>
 
-            <p>
-                <a href="/teste">
-                    Testar /users/me
-                </a>
-            </p>
+        <p>
+            <a href="/teste">
+                Testar /users/me
+            </a>
+        </p>
 
-            <hr>
+        <p>
+            <a href="/teste-busca">
+                🔎 Testar busca pública
+            </a>
+        </p>
 
-            <h2>🔎 Buscar produtos</h2>
+        <hr>
 
-            <form action="/buscar" method="get">
+        <h2>🔎 Buscar produtos</h2>
 
-                <input
-                    type="text"
-                    name="q"
-                    placeholder="Digite um produto"
-                    required
-                    style="
-                        padding:10px;
-                        width:250px;
-                        font-size:16px;
-                    "
-                >
+        <form action="/buscar" method="get">
 
-                <button
-                    type="submit"
-                    style="
-                        padding:10px 20px;
-                        font-size:16px;
-                    "
-                >
-                    Buscar
-                </button>
+            <input
+                type="text"
+                name="q"
+                placeholder="Digite um produto"
+                required
+                style="
+                    padding:10px;
+                    width:250px;
+                    font-size:16px;
+                "
+            >
 
-            </form>
+            <button
+                type="submit"
+                style="
+                    padding:10px 20px;
+                    font-size:16px;
+                "
+            >
+                Buscar
+            </button>
+
+        </form>
 
         </body>
         </html>
         """
 
 
-    # -----------------------------------------
+    # ==========================================
     # INICIAR OAUTH
-    # -----------------------------------------
+    # ==========================================
 
     code_verifier = secrets.token_urlsafe(64)
 
@@ -222,30 +228,29 @@ def home():
 
     <body>
 
-        <h1>🤖 Robô Ofertas ML</h1>
+    <h1>🤖 Robô Ofertas ML</h1>
 
-        <p>
-            Conecte sua conta do Mercado Livre:
-        </p>
+    <p>
+        Conecte sua conta do Mercado Livre:
+    </p>
 
-        <a href="{auth_url}">
-            <button style="
-                padding:15px 25px;
-                font-size:18px;
-            ">
-                Conectar Mercado Livre
-            </button>
-        </a>
+    <a href="{auth_url}">
+        <button style="
+            padding:15px 25px;
+            font-size:18px;
+        ">
+            Conectar Mercado Livre
+        </button>
+    </a>
 
     </body>
-
     </html>
     """
 
 
-# ==================================================
+# ==========================================
 # TESTE DO TOKEN
-# ==================================================
+# ==========================================
 
 @app.route("/teste")
 def teste():
@@ -253,17 +258,10 @@ def teste():
     access_token = session.get("access_token")
 
     if not access_token:
-
         return """
         <h1>❌ Token não encontrado</h1>
-
-        <p>
-            Primeiro conecte sua conta do Mercado Livre.
-        </p>
-
-        <a href="/">
-            ← Voltar
-        </a>
+        <p>Conecte sua conta primeiro.</p>
+        <a href="/">← Voltar</a>
         """, 401
 
     response = requests.get(
@@ -281,40 +279,121 @@ def teste():
     print("==============================")
 
     return f"""
+    <h1>🧪 Teste /users/me</h1>
+
+    <p>
+        Status da API:
+        <strong>{response.status_code}</strong>
+    </p>
+
+    <pre>{response.text}</pre>
+
+    <a href="/">← Voltar</a>
+    """, response.status_code
+
+
+# ==========================================
+# NOVO TESTE DA BUSCA PÚBLICA
+# ==========================================
+
+@app.route("/teste-busca")
+def teste_busca():
+
+    termo = request.args.get(
+        "q",
+        "Celular"
+    ).strip()
+
+    if not termo:
+        termo = "Celular"
+
+    # IMPORTANTE:
+    # Este teste NÃO envia Access Token.
+
+    response = requests.get(
+        "https://api.mercadolibre.com/sites/MLB/search",
+        params={
+            "q": termo,
+            "limit": 10,
+        },
+        timeout=30,
+    )
+
+    print("==============================")
+    print("TESTE BUSCA PÚBLICA")
+    print("Endpoint: /sites/MLB/search")
+    print("Termo:", termo)
+    print("Status:", response.status_code)
+    print("Resposta:", response.text)
+    print("==============================")
+
+    return f"""
     <!DOCTYPE html>
     <html>
 
     <head>
         <meta charset="UTF-8">
-        <title>Teste API</title>
+        <title>Teste Busca Pública</title>
     </head>
 
     <body>
 
-        <h1>🧪 Teste /users/me</h1>
+    <h1>🔎 Teste da busca pública</h1>
 
-        <p>
-            Status da API:
-            <strong>{response.status_code}</strong>
-        </p>
+    <p>
+        Termo:
+        <strong>{termo}</strong>
+    </p>
 
-        <pre>{response.text}</pre>
+    <p>
+        Status da API:
+        <strong>{response.status_code}</strong>
+    </p>
 
-        <hr>
+    <h3>Resposta:</h3>
 
-        <a href="/">
-            ← Voltar
-        </a>
+    <pre>{response.text}</pre>
+
+    <hr>
+
+    <form action="/teste-busca" method="get">
+
+        <input
+            type="text"
+            name="q"
+            placeholder="Produto"
+            value="{termo}"
+            style="
+                padding:10px;
+                width:250px;
+            "
+        >
+
+        <button
+            type="submit"
+            style="
+                padding:10px 20px;
+            "
+        >
+            Testar
+        </button>
+
+    </form>
+
+    <br>
+
+    <a href="/">
+        ← Voltar
+    </a>
 
     </body>
-
     </html>
     """, response.status_code
 
 
-# ==================================================
-# BUSCA DE PRODUTOS
-# ==================================================
+# ==========================================
+# BUSCA NORMAL
+# ==========================================
 
 @app.route("/buscar")
 def buscar():
@@ -332,22 +411,16 @@ def buscar():
     )
 
     if not access_token:
-
         return """
         <h1>❌ Conta não conectada</h1>
-
-        <a href="/">
-            Conectar Mercado Livre
-        </a>
+        <a href="/">Conectar Mercado Livre</a>
         """, 401
-
-    headers = {
-        "Authorization": f"Bearer {access_token}"
-    }
 
     response = requests.get(
         "https://api.mercadolibre.com/sites/MLB/search",
-        headers=headers,
+        headers={
+            "Authorization": f"Bearer {access_token}"
+        },
         params={
             "q": termo,
             "limit": 10,
@@ -356,7 +429,7 @@ def buscar():
     )
 
     print("==============================")
-    print("TESTE /sites/MLB/search")
+    print("BUSCA NORMAL")
     print("TERMO:", termo)
     print("STATUS:", response.status_code)
     print("RESPOSTA:", response.text)
@@ -373,8 +446,6 @@ def buscar():
         </p>
 
         <pre>{response.text}</pre>
-
-        <br>
 
         <a href="/">
             ← Voltar
