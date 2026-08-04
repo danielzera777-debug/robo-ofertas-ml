@@ -33,9 +33,73 @@ API_BASE = "https://api.mercadolibre.com"
 
 SITE_ID = "MLB"
 
-DOMAIN_CELLPHONES = "MLB-CELLPHONES"
+# ============================================================
+# CATEGORIAS
+# ============================================================
 
-CATEGORY_CELLPHONES = "MLB1055"
+CATEGORIAS = {
+
+    "celulares": {
+        "nome": "📱 Celulares",
+        "domain_id": "MLB-CELLPHONES",
+        "category_id": "MLB1055"
+    },
+
+    "roupas": {
+        "nome": "👕 Roupas",
+        "domain_id": None,
+        "category_id": "MLB1430"
+    },
+
+    "relogios": {
+        "nome": "⌚ Relógios",
+        "domain_id": None,
+        "category_id": "MLB3937"
+    },
+
+    "calcados": {
+        "nome": "👟 Calçados",
+        "domain_id": None,
+        "category_id": "MLB1430"
+    },
+
+    "beleza": {
+        "nome": "💄 Beleza",
+        "domain_id": None,
+        "category_id": "MLB1246"
+    },
+
+    "casa": {
+        "nome": "🏠 Casa",
+        "domain_id": None,
+        "category_id": "MLB1574"
+    },
+
+    "games": {
+        "nome": "🎮 Games",
+        "domain_id": None,
+        "category_id": "MLB1144"
+    },
+
+    "informatica": {
+        "nome": "💻 Informática",
+        "domain_id": None,
+        "category_id": "MLB1648"
+    },
+
+    "eletronicos": {
+        "nome": "🔊 Eletrônicos",
+        "domain_id": None,
+        "category_id": "MLB1000"
+    },
+
+    "todas": {
+        "nome": "🛒 Todas as categorias",
+        "domain_id": None,
+        "category_id": None
+    }
+}
+
 
 # ============================================================
 # PADRÕES DA REVENDA
@@ -51,21 +115,27 @@ LUCRO_MINIMO_PADRAO = 20
 # ============================================================
 
 def escapar(valor):
-    return html.escape(str(valor or ""))
+
+    return html.escape(
+        str(valor or "")
+    )
 
 
 def numero(valor):
 
     try:
+
         return float(valor)
 
     except Exception:
+
         return 0.0
 
 
 def formatar_preco(valor):
 
     if valor is None:
+
         return "Preço indisponível"
 
     try:
@@ -91,8 +161,13 @@ def formatar_preco(valor):
 def headers_api():
 
     headers = {
-        "Accept": "application/json",
-        "User-Agent": "Robo-Ofertas-ML/1.0"
+
+        "Accept":
+        "application/json",
+
+        "User-Agent":
+        "Robo-Ofertas-ML/2.0"
+
     }
 
     token = session.get(
@@ -246,6 +321,7 @@ def home():
         except requests.RequestException as erro:
 
             return f"""
+
             <h1>❌ Erro de conexão</h1>
 
             <pre>
@@ -253,12 +329,16 @@ def home():
             </pre>
 
             <a href="/">Voltar</a>
+
             """, 500
 
         if response.status_code != 200:
 
             return f"""
-            <h1>❌ Erro ao obter token</h1>
+
+            <h1>
+            ❌ Erro ao obter token
+            </h1>
 
             <p>
             Status:
@@ -269,7 +349,10 @@ def home():
             {escapar(response.text)}
             </pre>
 
-            <a href="/">Voltar</a>
+            <a href="/">
+            Voltar
+            </a>
+
             """, 400
 
         try:
@@ -335,6 +418,7 @@ def home():
         if user_response.status_code != 200:
 
             return f"""
+
             <h1>
             ❌ Erro ao consultar conta.
             </h1>
@@ -346,6 +430,7 @@ def home():
             <a href="/">
             Voltar
             </a>
+
             """, 400
 
         user_data = (
@@ -380,6 +465,7 @@ def home():
     )
 
     code_challenge = (
+
         base64.urlsafe_b64encode(
 
             hashlib.sha256(
@@ -425,11 +511,14 @@ def home():
     }
 
     auth_url = (
-        "https://auth.mercadolivre.com.br/authorization?"
+
+        "https://auth.mercadolivre.com.br/"
+        "authorization?"
         + urlencode(params)
     )
 
     return f"""
+
     <!DOCTYPE html>
 
     <html>
@@ -484,6 +573,7 @@ def home():
     </body>
 
     </html>
+
     """
 
 
@@ -495,6 +585,20 @@ def pagina_principal(
     nickname,
     user_id
 ):
+
+    opcoes = ""
+
+    for chave, dados in CATEGORIAS.items():
+
+        opcoes += f"""
+
+        <option value="{chave}">
+
+        {dados["nome"]}
+
+        </option>
+
+        """
 
     return f"""
 
@@ -532,14 +636,15 @@ def pagina_principal(
         border-radius:15px;
     }}
 
-    input {{
+    input,
+    select {{
         width:100%;
         box-sizing:border-box;
         padding:15px;
         font-size:17px;
         border:1px solid #ccc;
         border-radius:8px;
-        margin-bottom:10px;
+        margin-bottom:12px;
     }}
 
     button {{
@@ -592,7 +697,7 @@ def pagina_principal(
     <hr>
 
     <h2>
-    🔎 Buscar produto
+    🔎 Buscar produtos
     </h2>
 
     <form
@@ -600,10 +705,26 @@ def pagina_principal(
     method="get"
     >
 
+    <label>
+    📂 Categoria
+    </label>
+
+    <select
+    name="categoria"
+    >
+
+    {opcoes}
+
+    </select>
+
+    <label>
+    🔎 Produto
+    </label>
+
     <input
     type="text"
     name="q"
-    placeholder="Ex: iPhone 13, Galaxy S23..."
+    placeholder="Ex: iPhone 13, relógio, camisa..."
     required
     >
 
@@ -641,26 +762,27 @@ def pagina_principal(
     <div class="info">
 
     <strong>
-    💡 Configuração padrão
+    💡 Como usar
     </strong>
 
     <p>
-    Margem:
-    <strong>
-    {MARGEM_PADRAO}%
-    </strong>
+    1. Escolha uma categoria.
     </p>
 
     <p>
-    Lucro mínimo:
-    <strong>
-    {formatar_preco(LUCRO_MINIMO_PADRAO)}
-    </strong>
+    2. Digite o produto.
     </p>
 
     <p>
-    O sistema mostra primeiro as oportunidades
-    com maior lucro.
+    3. Escolha a margem.
+    </p>
+
+    <p>
+    4. O robô procura produtos e anúncios.
+    </p>
+
+    <p>
+    5. As melhores oportunidades aparecem primeiro.
     </p>
 
     </div>
@@ -687,18 +809,88 @@ def pagina_principal(
 
 
 # ============================================================
+# DESCOBRIR DOMÍNIO
+# ============================================================
+
+def descobrir_dominio(
+    termo
+):
+
+    response = requisicao_get(
+
+        f"{API_BASE}/sites/"
+        f"{SITE_ID}/domain_discovery/search",
+
+        {
+            "q": termo,
+            "limit": 5
+        }
+
+    )
+
+    if response is None:
+
+        return []
+
+    if response.status_code != 200:
+
+        return []
+
+    try:
+
+        return response.json()
+
+    except Exception:
+
+        return []
+
+
+# ============================================================
 # BUSCAR PRODUTOS
 # ============================================================
 
 def buscar_produtos_catalogo(
     termo,
+    categoria="todas",
     offset=0,
     limit=20
 ):
 
-    url = (
-        f"{API_BASE}/products/search"
+    dados_categoria = CATEGORIAS.get(
+        categoria,
+        CATEGORIAS["todas"]
     )
+
+    dominio = dados_categoria.get(
+        "domain_id"
+    )
+
+    # ========================================================
+    # CATEGORIA TODAS
+    # ========================================================
+
+    if categoria == "todas":
+
+        dominios = descobrir_dominio(
+            termo
+        )
+
+        if not dominios:
+
+            return None
+
+        # Primeiro domínio encontrado
+        dominio = dominios[0].get(
+            "domain_id"
+        )
+
+        if not dominio:
+
+            return None
+
+    # ========================================================
+    # BUSCA
+    # ========================================================
 
     params = {
 
@@ -711,9 +903,6 @@ def buscar_produtos_catalogo(
         "q":
         termo,
 
-        "domain_id":
-        DOMAIN_CELLPHONES,
-
         "offset":
         offset,
 
@@ -721,28 +910,33 @@ def buscar_produtos_catalogo(
         limit
     }
 
+    if dominio:
+
+        params["domain_id"] = (
+            dominio
+        )
+
     return requisicao_get(
-        url,
+
+        f"{API_BASE}/products/search",
+
         params
+
     )
 
 
 # ============================================================
-# PUBLICAÇÕES DO PRODUTO
+# PUBLICAÇÕES
 # ============================================================
 
 def buscar_publicacoes(
     product_id
 ):
 
-    url = (
-        f"{API_BASE}/products/"
-        f"{product_id}/items"
-    )
-
     response = requisicao_get(
 
-        url,
+        f"{API_BASE}/products/"
+        f"{product_id}/items",
 
         {
             "offset": 0,
@@ -774,7 +968,7 @@ def buscar_publicacoes(
 
 
 # ============================================================
-# DETALHES DOS ANÚNCIOS
+# DETALHES
 # ============================================================
 
 def buscar_detalhes_itens(
@@ -874,7 +1068,10 @@ def buscar_vendedores(
     for seller_id in seller_ids:
 
         response = requisicao_get(
-            f"{API_BASE}/users/{seller_id}"
+
+            f"{API_BASE}/users/"
+            f"{seller_id}"
+
         )
 
         if response is None:
@@ -913,9 +1110,19 @@ def buscar():
         ""
     ).strip()
 
+    categoria = request.args.get(
+        "categoria",
+        "todas"
+    )
+
+    if categoria not in CATEGORIAS:
+
+        categoria = "todas"
+
     if not termo:
 
         return """
+
         <h2>
         ❌ Digite um produto.
         </h2>
@@ -923,6 +1130,7 @@ def buscar():
         <a href="/">
         ← Voltar
         </a>
+
         """, 400
 
     if not session.get(
@@ -930,6 +1138,7 @@ def buscar():
     ):
 
         return """
+
         <h1>
         ❌ Mercado Livre não conectado
         </h1>
@@ -937,6 +1146,7 @@ def buscar():
         <a href="/">
         🔐 Conectar
         </a>
+
         """, 401
 
     # ========================================================
@@ -1018,6 +1228,8 @@ def buscar():
 
         termo,
 
+        categoria,
+
         offset,
 
         20
@@ -1027,13 +1239,19 @@ def buscar():
     if response is None:
 
         return """
+
         <h1>
-        ❌ Erro de conexão
+        ❌ Não foi possível realizar a busca.
         </h1>
+
+        <p>
+        Tente outro produto ou categoria.
+        </p>
 
         <a href="/">
         ← Voltar
         </a>
+
         """, 500
 
     if response.status_code != 200:
@@ -1052,6 +1270,8 @@ def buscar():
         <pre>
         {escapar(response.text)}
         </pre>
+
+        <br>
 
         <a href="/diagnostico">
         🧪 Diagnóstico
@@ -1072,9 +1292,11 @@ def buscar():
     except Exception:
 
         return """
+
         <h1>
         ❌ Resposta inválida
         </h1>
+
         """, 500
 
     produtos = data.get(
@@ -1110,9 +1332,7 @@ def buscar():
             ""
         )
 
-        if domain_id != (
-            DOMAIN_CELLPHONES
-        ):
+        if not product_id:
 
             continue
 
@@ -1136,6 +1356,7 @@ def buscar():
             )
 
             if not item_id:
+
                 continue
 
             custo = numero(
@@ -1144,9 +1365,9 @@ def buscar():
                 )
             )
 
-            # ================================================
-            # PREÇO DE VENDA
-            # ================================================
+            if custo <= 0:
+
+                continue
 
             preco_venda = (
 
@@ -1163,10 +1384,6 @@ def buscar():
                 preco_venda -
                 custo
             )
-
-            # ================================================
-            # FILTRO DE LUCRO
-            # ================================================
 
             if lucro < lucro_minimo:
 
@@ -1212,7 +1429,7 @@ def buscar():
                 "category_id":
                 item.get(
                     "category_id",
-                    CATEGORY_CELLPHONES
+                    ""
                 ),
 
                 "sold_quantity":
@@ -1289,20 +1506,12 @@ def buscar():
         )
 
         if not detalhe:
+
             continue
-
-        if detalhe.get(
-            "price"
-        ) is not None:
-
-            anuncio["price"] = numero(
-                detalhe.get(
-                    "price"
-                )
-            )
 
         for campo in [
 
+            "price",
             "title",
             "seller_id",
             "condition",
@@ -1323,8 +1532,6 @@ def buscar():
                         campo
                     )
                 )
-
-        # Recalcular depois dos detalhes
 
         custo = numero(
             anuncio.get(
@@ -1349,7 +1556,7 @@ def buscar():
         )
 
     # ========================================================
-    # FILTRAR NOVAMENTE
+    # FILTRAR
     # ========================================================
 
     anuncios = [
@@ -1381,18 +1588,16 @@ def buscar():
     )
 
     # ========================================================
-    # ORDENAR
+    # ORDENAR PELO LUCRO
     # ========================================================
 
     anuncios.sort(
 
-        key=lambda anuncio: (
+        key=lambda anuncio:
 
-            anuncio.get(
-                "lucro",
-                0
-            )
-
+        anuncio.get(
+            "lucro",
+            0
         ),
 
         reverse=True
@@ -1416,6 +1621,10 @@ def buscar():
             seller_ids
         )
     )
+
+    categoria_nome = CATEGORIAS[
+        categoria
+    ]["nome"]
 
     # ========================================================
     # HTML
@@ -1562,6 +1771,10 @@ def buscar():
     </h1>
 
     <h2>
+    {categoria_nome}
+    </h2>
+
+    <h2>
     🔎 {escapar(termo)}
     </h2>
 
@@ -1620,8 +1833,8 @@ def buscar():
         </p>
 
         <p>
-        Tente diminuir o lucro mínimo ou
-        pesquisar outro produto.
+        Tente diminuir o lucro mínimo,
+        mudar a margem ou pesquisar outro produto.
         </p>
 
         </div>
@@ -1682,9 +1895,9 @@ def buscar():
             "Não informado"
         )
 
-        categoria = anuncio.get(
+        categoria_anuncio = anuncio.get(
             "category_id",
-            CATEGORY_CELLPHONES
+            ""
         )
 
         link = anuncio.get(
@@ -1706,7 +1919,7 @@ def buscar():
 
         mensagem = (
 
-            f"📱 {titulo}\n\n"
+            f"🛍️ {titulo}\n\n"
 
             f"💰 Preço: "
             f"{formatar_preco(preco_venda)}\n\n"
@@ -1759,7 +1972,7 @@ def buscar():
         pagina += f"""
 
         <h2>
-        📱 {escapar(titulo)}
+        🛍️ {escapar(titulo)}
         </h2>
 
         <div class="custo">
@@ -1826,7 +2039,14 @@ def buscar():
         <div class="info">
 
         📂 Categoria:
-        {escapar(categoria)}
+        {escapar(categoria_anuncio)}
+
+        </div>
+
+        <div class="info">
+
+        🌐 Domínio:
+        {escapar(anuncio.get("domain_id"))}
 
         </div>
 
@@ -1904,6 +2124,7 @@ def diagnostico():
     ):
 
         return """
+
         <h1>
         ❌ Conta não conectada
         </h1>
@@ -1911,6 +2132,7 @@ def diagnostico():
         <a href="/">
         ← Voltar
         </a>
+
         """, 401
 
     testes = [
@@ -1933,13 +2155,13 @@ def diagnostico():
                 "active",
 
                 "site_id":
-                "MLB",
+                SITE_ID,
 
                 "q":
                 "iPhone 13",
 
                 "domain_id":
-                DOMAIN_CELLPHONES,
+                "MLB-CELLPHONES",
 
                 "limit":
                 5
@@ -1947,17 +2169,34 @@ def diagnostico():
         ),
 
         (
-            "3️⃣ Produto MLB18500856",
+            "3️⃣ Domain Discovery",
 
-            f"{API_BASE}/products/MLB18500856",
+            f"{API_BASE}/sites/"
+            f"{SITE_ID}/domain_discovery/search",
+
+            {
+                "q":
+                "relógio",
+
+                "limit":
+                5
+            }
+        ),
+
+        (
+            "4️⃣ Produto MLB18500856",
+
+            f"{API_BASE}/products/"
+            f"MLB18500856",
 
             None
         ),
 
         (
-            "4️⃣ Publicações MLB18500856",
+            "5️⃣ Publicações MLB18500856",
 
-            f"{API_BASE}/products/MLB18500856/items",
+            f"{API_BASE}/products/"
+            f"MLB18500856/items",
 
             {
                 "offset":
@@ -2123,7 +2362,7 @@ def logout():
 
 
 # ============================================================
-# TESTE DE CONFIGURAÇÃO
+# TESTE CONFIG
 # ============================================================
 
 @app.route("/teste-config")
