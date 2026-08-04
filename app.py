@@ -5,7 +5,7 @@ import base64
 import requests
 import html
 
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 from flask import Flask, request, session
 
 app = Flask(__name__)
@@ -29,28 +29,19 @@ app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
-# ============================================================
-# MERCADO LIVRE
-# ============================================================
-
 API_BASE = "https://api.mercadolibre.com"
 
 SITE_ID = "MLB"
-
 DOMAIN_CELLPHONES = "MLB-CELLPHONES"
-
 CATEGORY_CELLPHONES = "MLB1055"
 
 
 # ============================================================
-# FUNÇÕES AUXILIARES
+# FUNÇÕES
 # ============================================================
 
 def escapar(valor):
-
-    return html.escape(
-        str(valor or "")
-    )
+    return html.escape(str(valor or ""))
 
 
 def formatar_preco(valor):
@@ -74,6 +65,14 @@ def formatar_preco(valor):
         return "Preço indisponível"
 
 
+def numero(valor):
+
+    try:
+        return float(valor)
+    except Exception:
+        return 0.0
+
+
 def headers_api():
 
     headers = {
@@ -81,9 +80,7 @@ def headers_api():
         "User-Agent": "Robo-Ofertas-ML/1.0"
     }
 
-    token = session.get(
-        "access_token"
-    )
+    token = session.get("access_token")
 
     if token:
 
@@ -127,29 +124,16 @@ def requisicao_get(
 def home():
 
     code = request.args.get("code")
-
     state = request.args.get("state")
 
     if not CLIENT_ID:
-
-        return (
-            "ML_CLIENT_ID não configurado no Render.",
-            500
-        )
+        return "ML_CLIENT_ID não configurado no Render.", 500
 
     if not CLIENT_SECRET:
-
-        return (
-            "ML_CLIENT_SECRET não configurado no Render.",
-            500
-        )
+        return "ML_CLIENT_SECRET não configurado no Render.", 500
 
     if not REDIRECT_URI:
-
-        return (
-            "ML_REDIRECT_URI não configurado no Render.",
-            500
-        )
+        return "ML_REDIRECT_URI não configurado no Render.", 500
 
     # ========================================================
     # CALLBACK
@@ -157,32 +141,21 @@ def home():
 
     if code:
 
-        saved_state = session.get(
-            "state"
-        )
+        saved_state = session.get("state")
 
         if not saved_state:
 
             return """
             <h2>❌ Sessão expirada.</h2>
-
-            <p>
-            Conecte novamente sua conta.
-            </p>
-
-            <a href="/">
-            ← Voltar
-            </a>
+            <p>Conecte novamente sua conta.</p>
+            <a href="/">← Voltar</a>
             """, 400
 
         if state != saved_state:
 
             return """
             <h2>❌ State inválido.</h2>
-
-            <a href="/">
-            ← Voltar
-            </a>
+            <a href="/">← Voltar</a>
             """, 400
 
         code_verifier = session.get(
@@ -192,14 +165,8 @@ def home():
         if not code_verifier:
 
             return """
-            <h2>
-            ❌ Code verifier não encontrado.
-            </h2>
+            <h2>❌ Code verifier não encontrado.</h2>
             """, 400
-
-        # ====================================================
-        # TOKEN
-        # ====================================================
 
         try:
 
@@ -235,35 +202,24 @@ def home():
 
             return f"""
             <h1>❌ Erro de conexão</h1>
-
-            <pre>
-{escapar(erro)}
-            </pre>
-
-            <a href="/">
-            ← Voltar
-            </a>
+            <pre>{escapar(erro)}</pre>
+            <a href="/">← Voltar</a>
             """, 500
 
         if response.status_code != 200:
 
             return f"""
-            <h1>
-            ❌ Erro ao obter token
-            </h1>
+            <h1>❌ Erro ao obter token</h1>
 
             <p>
-            Status:
-            {response.status_code}
+            Status: {response.status_code}
             </p>
 
             <pre>
-{escapar(response.text)}
+            {escapar(response.text)}
             </pre>
 
-            <a href="/">
-            ← Voltar
-            </a>
+            <a href="/">← Voltar</a>
             """, 400
 
         try:
@@ -273,9 +229,7 @@ def home():
         except Exception:
 
             return """
-            <h2>
-            ❌ Resposta inválida.
-            </h2>
+            <h2>❌ Resposta inválida.</h2>
             """, 400
 
         access_token = token_data.get(
@@ -295,15 +249,11 @@ def home():
         )
 
         session["refresh_token"] = (
-            token_data.get(
-                "refresh_token"
-            )
+            token_data.get("refresh_token")
         )
 
         session["expires_in"] = (
-            token_data.get(
-                "expires_in"
-            )
+            token_data.get("expires_in")
         )
 
         session.pop(
@@ -340,13 +290,11 @@ def home():
             </h1>
 
             <pre>
-{escapar(user_response.text)}
+            {escapar(user_response.text)}
             </pre>
             """, 400
 
-        user_data = (
-            user_response.json()
-        )
+        user_data = user_response.json()
 
         nickname = user_data.get(
             "nickname",
@@ -369,9 +317,7 @@ def home():
     # PKCE
     # ========================================================
 
-    code_verifier = secrets.token_urlsafe(
-        64
-    )
+    code_verifier = secrets.token_urlsafe(64)
 
     code_challenge = (
         base64.urlsafe_b64encode(
@@ -383,9 +329,7 @@ def home():
         .decode()
     )
 
-    state = secrets.token_urlsafe(
-        32
-    )
+    state = secrets.token_urlsafe(32)
 
     session["code_verifier"] = (
         code_verifier
@@ -433,9 +377,7 @@ def home():
     content="width=device-width, initial-scale=1"
     >
 
-    <title>
-    Robô Ofertas ML
-    </title>
+    <title>Robô Ofertas ML</title>
 
     </head>
 
@@ -446,9 +388,7 @@ def home():
     text-align:center;
     ">
 
-    <h1>
-    🤖 Robô Ofertas ML
-    </h1>
+    <h1>🤖 Robô Ofertas ML</h1>
 
     <p>
     Conecte sua conta do Mercado Livre
@@ -500,9 +440,7 @@ def pagina_principal(
     content="width=device-width, initial-scale=1"
     >
 
-    <title>
-    Robô Ofertas ML
-    </title>
+    <title>Robô Ofertas ML</title>
 
     <style>
 
@@ -541,8 +479,11 @@ def pagina_principal(
         color:white;
     }}
 
-    a {{
-        color:#3483fa;
+    .ajuda {{
+        background:#f5f5f5;
+        padding:15px;
+        border-radius:10px;
+        margin-top:15px;
     }}
 
     </style>
@@ -578,7 +519,7 @@ def pagina_principal(
     <hr>
 
     <h2>
-    🔎 Buscar celulares
+    🔎 Buscar produtos
     </h2>
 
     <form
@@ -593,11 +534,44 @@ def pagina_principal(
     required
     >
 
+    <h3>
+    📈 Sua margem de lucro
+    </h3>
+
+    <input
+    type="number"
+    name="margem"
+    value="30"
+    min="0"
+    max="500"
+    step="1"
+    required
+    >
+
+    <p>
+    Digite a margem desejada em porcentagem.
+    Exemplo: 30 = 30%.
+    </p>
+
     <button type="submit">
-    🔎 Buscar
+    🔎 Buscar ofertas
     </button>
 
     </form>
+
+    <div class="ajuda">
+
+    <strong>
+    💡 Exemplo
+    </strong>
+
+    <p>
+    Se o produto custa R$ 1.000 e você colocar
+    margem de 30%, o sistema sugerirá
+    R$ 1.300.
+    </p>
+
+    </div>
 
     <br>
 
@@ -620,7 +594,7 @@ def pagina_principal(
 
 
 # ============================================================
-# BUSCAR PRODUTOS DE CATÁLOGO
+# BUSCAR PRODUTOS
 # ============================================================
 
 def buscar_produtos_catalogo(
@@ -709,21 +683,9 @@ def buscar_publicacoes(
 
             return [], "json"
 
-    # 404 No winners found
     if response.status_code == 404:
 
-        try:
-
-            data = response.json()
-
-            if data.get("error") == "not_found":
-
-                return [], "no_winners"
-
-        except Exception:
-            pass
-
-        return [], "not_found"
+        return [], "no_winners"
 
     return [], (
         f"http_{response.status_code}"
@@ -731,7 +693,7 @@ def buscar_publicacoes(
 
 
 # ============================================================
-# BUSCAR DETALHES DOS ANÚNCIOS
+# DETALHES DOS ITENS
 # ============================================================
 
 def buscar_detalhes_itens(
@@ -739,10 +701,8 @@ def buscar_detalhes_itens(
 ):
 
     if not item_ids:
-
         return []
 
-    # Remove duplicados
     item_ids = list(
         dict.fromkeys(
             item_ids
@@ -751,8 +711,6 @@ def buscar_detalhes_itens(
 
     resultados = []
 
-    # API aceita multiget.
-    # Fazemos blocos de até 20.
     for inicio in range(
         0,
         len(item_ids),
@@ -767,17 +725,11 @@ def buscar_detalhes_itens(
             bloco
         )
 
-        url = (
-            f"{API_BASE}/items"
-        )
-
-        params = {
-            "ids": ids
-        }
-
         response = requisicao_get(
-            url,
-            params=params
+            f"{API_BASE}/items",
+            params={
+                "ids": ids
+            }
         )
 
         if response is None:
@@ -816,7 +768,7 @@ def buscar_detalhes_itens(
 
 
 # ============================================================
-# BUSCAR NOME DOS VENDEDORES
+# VENDEDORES
 # ============================================================
 
 def buscar_vendedores(
@@ -864,7 +816,7 @@ def buscar_vendedores(
 
 
 # ============================================================
-# BUSCA PRINCIPAL
+# BUSCA
 # ============================================================
 
 @app.route("/buscar")
@@ -901,6 +853,35 @@ def buscar():
         </a>
         """, 401
 
+    # ========================================================
+    # MARGEM
+    # ========================================================
+
+    try:
+
+        margem = float(
+            request.args.get(
+                "margem",
+                30
+            )
+        )
+
+    except Exception:
+
+        margem = 30
+
+    margem = max(
+        0,
+        min(
+            margem,
+            500
+        )
+    )
+
+    # ========================================================
+    # PAGINAÇÃO
+    # ========================================================
+
     try:
 
         offset = int(
@@ -932,13 +913,8 @@ def buscar():
     if response is None:
 
         return """
-        <h1>
-        ❌ Erro de conexão
-        </h1>
-
-        <a href="/">
-        ← Voltar
-        </a>
+        <h1>❌ Erro de conexão</h1>
+        <a href="/">← Voltar</a>
         """, 500
 
     if response.status_code != 200:
@@ -956,10 +932,8 @@ def buscar():
         </p>
 
         <pre>
-{escapar(response.text)}
+        {escapar(response.text)}
         </pre>
-
-        <br>
 
         <a href="/diagnostico">
         🧪 Diagnóstico
@@ -1000,12 +974,10 @@ def buscar():
     )
 
     # ========================================================
-    # COLETA PUBLICAÇÕES
+    # PUBLICAÇÕES
     # ========================================================
 
     anuncios_brutos = []
-
-    produtos_sem_anuncio = 0
 
     for produto in produtos:
 
@@ -1019,9 +991,7 @@ def buscar():
             ""
         )
 
-        # Segurança: somente celulares
         if domain_id != DOMAIN_CELLPHONES:
-
             continue
 
         itens, erro = (
@@ -1031,20 +1001,13 @@ def buscar():
         )
 
         if not itens:
-
-            produtos_sem_anuncio += 1
-
             continue
 
         for item in itens:
 
             item_id = (
-                item.get(
-                    "item_id"
-                )
-                or item.get(
-                    "id"
-                )
+                item.get("item_id")
+                or item.get("id")
             )
 
             if not item_id:
@@ -1068,14 +1031,10 @@ def buscar():
                 item_id,
 
                 "price":
-                item.get(
-                    "price"
-                ),
+                item.get("price"),
 
                 "seller_id":
-                item.get(
-                    "seller_id"
-                ),
+                item.get("seller_id"),
 
                 "condition":
                 item.get(
@@ -1119,60 +1078,17 @@ def buscar():
                         "name",
                         "Produto"
                     )
-                ),
-
-                "city":
-                (
-                    item.get(
-                        "seller_address",
-                        {}
-                    ) or {}
-                ).get(
-                    "city",
-                    {}
-                ).get(
-                    "name",
-                    ""
                 )
-                if isinstance(
-                    item.get(
-                        "seller_address"
-                    ),
-                    dict
-                )
-                else "",
-
-                "state":
-                (
-                    item.get(
-                        "seller_address",
-                        {}
-                    ) or {}
-                ).get(
-                    "state",
-                    {}
-                ).get(
-                    "name",
-                    ""
-                )
-                if isinstance(
-                    item.get(
-                        "seller_address"
-                    ),
-                    dict
-                )
-                else ""
             })
 
+
     # ========================================================
-    # DETALHAR ANÚNCIOS
+    # DETALHES
     # ========================================================
 
     ids = [
 
-        anuncio[
-            "item_id"
-        ]
+        anuncio["item_id"]
 
         for anuncio in anuncios_brutos
     ]
@@ -1185,19 +1101,13 @@ def buscar():
 
     for detalhe in detalhes:
 
-        item_id = detalhe.get(
-            "id"
-        )
+        item_id = detalhe.get("id")
 
         if item_id:
 
             detalhes_map[
                 item_id
             ] = detalhe
-
-    # ========================================================
-    # MESCLA DADOS
-    # ========================================================
 
     anuncios = []
 
@@ -1213,77 +1123,26 @@ def buscar():
 
         if detalhe:
 
-            anuncio["title"] = (
-                detalhe.get(
-                    "title"
-                )
-                or anuncio["title"]
-            )
+            campos = [
 
-            anuncio["price"] = (
-                detalhe.get(
-                    "price"
-                )
-                if detalhe.get(
-                    "price"
-                ) is not None
-                else anuncio["price"]
-            )
+                "title",
+                "price",
+                "seller_id",
+                "condition",
+                "category_id",
+                "sold_quantity",
+                "available_quantity",
+                "permalink",
+                "thumbnail"
+            ]
 
-            anuncio["seller_id"] = (
-                detalhe.get(
-                    "seller_id"
-                )
-                or anuncio["seller_id"]
-            )
+            for campo in campos:
 
-            anuncio["condition"] = (
-                detalhe.get(
-                    "condition"
-                )
-                or anuncio["condition"]
-            )
+                if detalhe.get(campo) is not None:
 
-            anuncio["category_id"] = (
-                detalhe.get(
-                    "category_id"
-                )
-                or anuncio["category_id"]
-            )
-
-            anuncio["sold_quantity"] = (
-                detalhe.get(
-                    "sold_quantity"
-                )
-                if detalhe.get(
-                    "sold_quantity"
-                ) is not None
-                else anuncio["sold_quantity"]
-            )
-
-            anuncio["available_quantity"] = (
-                detalhe.get(
-                    "available_quantity"
-                )
-                if detalhe.get(
-                    "available_quantity"
-                ) is not None
-                else anuncio["available_quantity"]
-            )
-
-            anuncio["permalink"] = (
-                detalhe.get(
-                    "permalink"
-                )
-                or anuncio["permalink"]
-            )
-
-            anuncio["thumbnail"] = (
-                detalhe.get(
-                    "thumbnail"
-                )
-                or anuncio["thumbnail"]
-            )
+                    anuncio[campo] = (
+                        detalhe.get(campo)
+                    )
 
         anuncios.append(
             anuncio
@@ -1306,29 +1165,49 @@ def buscar():
     )
 
     # ========================================================
-    # ORDENA MENOR PREÇO
+    # CALCULAR PREÇO / LUCRO
     # ========================================================
 
-    def chave_preco(anuncio):
+    for anuncio in anuncios:
 
-        preco = anuncio.get(
-            "price"
+        custo = numero(
+            anuncio.get(
+                "price"
+            )
         )
 
-        try:
-
-            return float(
-                preco
+        preco_venda = (
+            custo *
+            (
+                1 +
+                margem / 100
             )
+        )
 
-        except Exception:
+        lucro = (
+            preco_venda -
+            custo
+        )
 
-            return float(
-                "inf"
-            )
+        anuncio["custo"] = custo
+
+        anuncio["preco_venda"] = (
+            preco_venda
+        )
+
+        anuncio["lucro"] = lucro
+
+    # ========================================================
+    # ORDENAR PELO MAIOR LUCRO
+    # ========================================================
 
     anuncios.sort(
-        key=chave_preco
+        key=lambda x:
+        x.get(
+            "lucro",
+            0
+        ),
+        reverse=True
     )
 
     # ========================================================
@@ -1409,26 +1288,38 @@ def buscar():
         margin-bottom:12px;
     }}
 
-    .preco {{
+    .custo {{
+        font-size:18px;
+        color:#555;
+    }}
+
+    .venda {{
         font-size:28px;
         font-weight:bold;
         color:#008000;
+        margin:8px 0;
+    }}
+
+    .lucro {{
+        font-size:20px;
+        font-weight:bold;
+        color:#006400;
+        background:#d4edda;
+        padding:10px;
+        border-radius:8px;
+        margin:10px 0;
+    }}
+
+    .margem {{
+        background:#e7f1ff;
+        padding:10px;
+        border-radius:8px;
         margin:10px 0;
     }}
 
     .info {{
         color:#555;
         margin:7px 0;
-    }}
-
-    .menor {{
-        background:#d4edda;
-        color:#155724;
-        padding:8px;
-        border-radius:7px;
-        display:inline-block;
-        margin-bottom:10px;
-        font-weight:bold;
     }}
 
     .botao {{
@@ -1441,24 +1332,26 @@ def buscar():
         margin-top:10px;
     }}
 
-    .aviso {{
-        background:#fff3cd;
-        padding:15px;
-        border-radius:8px;
-    }}
-
-    .paginas {{
-        display:flex;
-        justify-content:space-between;
-        margin:20px 0;
-    }}
-
-    .paginas a {{
-        background:#3483fa;
+    .whatsapp {{
+        display:inline-block;
+        background:#25D366;
         color:white;
-        padding:12px 18px;
+        padding:13px 20px;
         border-radius:8px;
         text-decoration:none;
+        margin-top:10px;
+    }}
+
+    .topo {{
+        background:#fff3cd;
+        padding:15px;
+        border-radius:10px;
+        margin-bottom:15px;
+    }}
+
+    .voltar {{
+        display:inline-block;
+        margin-top:10px;
     }}
 
     </style>
@@ -1476,7 +1369,7 @@ def buscar():
     </h1>
 
     <p>
-    📱 Produtos de catálogo encontrados:
+    📱 Produtos encontrados:
     <strong>
     {total_produtos}
     </strong>
@@ -1489,20 +1382,26 @@ def buscar():
     </strong>
     </p>
 
-    <p>
-    💰 Ordenado do menor para o maior preço
-    </p>
+    </div>
 
-    <a href="/">
-    ← Nova pesquisa
-    </a>
+    <div class="topo">
+
+    <strong>
+    📈 Margem utilizada:
+    {margem:.0f}%
+    </strong>
+
+    <p>
+    Os resultados abaixo mostram o preço encontrado,
+    o preço sugerido de revenda e o lucro estimado.
+    </p>
 
     </div>
 
     """
 
     # ========================================================
-    # SEM ANÚNCIOS
+    # NENHUM ANÚNCIO
     # ========================================================
 
     if not anuncios:
@@ -1512,13 +1411,13 @@ def buscar():
         <div class="card">
 
         <h2>
-        😕 Nenhum anúncio disponível
+        😕 Nenhum anúncio encontrado
         </h2>
 
         <p>
         Os produtos de catálogo foram encontrados,
-        mas não há publicações disponíveis para
-        esses produtos neste momento.
+        mas não existem publicações disponíveis
+        para eles neste momento.
         </p>
 
         </div>
@@ -1526,7 +1425,7 @@ def buscar():
         """
 
     # ========================================================
-    # ANÚNCIOS
+    # CARDS
     # ========================================================
 
     for indice, anuncio in enumerate(
@@ -1543,8 +1442,19 @@ def buscar():
             "Produto"
         )
 
-        preco = anuncio.get(
-            "price"
+        custo = anuncio.get(
+            "custo",
+            0
+        )
+
+        preco_venda = anuncio.get(
+            "preco_venda",
+            0
+        )
+
+        lucro = anuncio.get(
+            "lucro",
+            0
         )
 
         seller_id = anuncio.get(
@@ -1586,6 +1496,26 @@ def buscar():
                 + item_id
             )
 
+        # ====================================================
+        # MENSAGEM WHATSAPP
+        # ====================================================
+
+        mensagem = f"""
+📱 {titulo}
+
+💰 Preço: {formatar_preco(preco_venda)}
+
+🔥 Produto disponível!
+
+🛒 Saiba mais:
+{link}
+        """.strip()
+
+        whatsapp_url = (
+            "https://wa.me/?text="
+            + quote(mensagem)
+        )
+
         pagina += """
 
         <div class="card">
@@ -1596,8 +1526,18 @@ def buscar():
 
             pagina += """
 
-            <div class="menor">
-            🏆 MENOR PREÇO ENCONTRADO
+            <div style="
+            background:#d4edda;
+            color:#155724;
+            padding:10px;
+            border-radius:8px;
+            display:inline-block;
+            font-weight:bold;
+            margin-bottom:10px;
+            ">
+
+            🏆 MELHOR OPORTUNIDADE
+
             </div>
 
             """
@@ -1620,53 +1560,82 @@ def buscar():
         📱 {escapar(titulo)}
         </h2>
 
-        <div class="preco">
-        {formatar_preco(preco)}
+        <div class="custo">
+
+        💵 Preço encontrado:
+
+        <strong>
+        {formatar_preco(custo)}
+        </strong>
+
+        </div>
+
+        <div class="margem">
+
+        📈 Margem:
+
+        <strong>
+        {margem:.0f}%
+        </strong>
+
+        </div>
+
+        <div class="venda">
+
+        🏷️ Venda sugerida:
+
+        {formatar_preco(preco_venda)}
+
+        </div>
+
+        <div class="lucro">
+
+        💰 Lucro estimado:
+
+        {formatar_preco(lucro)}
+
         </div>
 
         <div class="info">
+
         👤 Vendedor:
+
         <strong>
         {escapar(seller_nome)}
         </strong>
+
         </div>
 
         <div class="info">
+
         🔥 Vendidos:
+
         <strong>
         {escapar(vendidos)}
         </strong>
+
         </div>
 
         <div class="info">
+
         🏷️ Condição:
         {escapar(condicao)}
+
         </div>
 
         <div class="info">
+
         📂 Categoria:
         {escapar(categoria)}
+
         </div>
 
         <div class="info">
+
         🆔 Anúncio:
         {escapar(item_id)}
+
         </div>
-
-        """
-
-        if seller_id:
-
-            pagina += f"""
-
-            <div class="info">
-            👤 ID vendedor:
-            {escapar(seller_id)}
-            </div>
-
-            """
-
-        pagina += f"""
 
         <a
         class="botao"
@@ -1674,7 +1643,20 @@ def buscar():
         target="_blank"
         rel="noopener noreferrer"
         >
-        🛒 Abrir anúncio
+
+        🛒 Ver anúncio
+
+        </a>
+
+        <a
+        class="whatsapp"
+        href="{escapar(whatsapp_url)}"
+        target="_blank"
+        rel="noopener noreferrer"
+        >
+
+        📲 Enviar no WhatsApp
+
         </a>
 
         </div>
@@ -1687,7 +1669,13 @@ def buscar():
 
     pagina += """
 
-    <div class="paginas">
+    <div
+    style="
+    display:flex;
+    justify-content:space-between;
+    margin:20px 0;
+    "
+    >
 
     """
 
@@ -1701,18 +1689,19 @@ def buscar():
         pagina += f"""
 
         <a
-        href="/buscar?q={escapar(termo)}&offset={anterior}"
+        class="botao"
+        href="/buscar?q={escapar(termo)}&margem={margem}&offset={anterior}"
         >
+
         ← Anterior
+
         </a>
 
         """
 
     else:
 
-        pagina += """
-        <span></span>
-        """
+        pagina += "<span></span>"
 
     if offset + 20 < total_produtos:
 
@@ -1721,9 +1710,12 @@ def buscar():
         pagina += f"""
 
         <a
-        href="/buscar?q={escapar(termo)}&offset={proximo}"
+        class="botao"
+        href="/buscar?q={escapar(termo)}&margem={margem}&offset={proximo}"
         >
+
         Próximos →
+
         </a>
 
         """
@@ -1731,6 +1723,15 @@ def buscar():
     pagina += """
 
     </div>
+
+    <a
+    class="voltar"
+    href="/"
+    >
+
+    ← Nova pesquisa
+
+    </a>
 
     </div>
 
@@ -1886,7 +1887,7 @@ def diagnostico():
         </p>
 
         <pre>
-{escapar(texto)}
+        {escapar(texto)}
         </pre>
 
         </div>
@@ -1932,10 +1933,6 @@ def diagnostico():
     🧪 Diagnóstico Mercado Livre
     </h1>
 
-    <p>
-    O token não é exibido.
-    </p>
-
     {"".join(blocos)}
 
     <a href="/">
@@ -1947,6 +1944,32 @@ def diagnostico():
     </body>
 
     </html>
+
+    """
+
+
+# ============================================================
+# LOGOUT
+# ============================================================
+
+@app.route("/logout")
+def logout():
+
+    session.clear()
+
+    return """
+
+    <h1>
+    🔓 Desconectado
+    </h1>
+
+    <p>
+    Sessão encerrada.
+    </p>
+
+    <a href="/">
+    🔐 Conectar novamente
+    </a>
 
     """
 
@@ -2000,32 +2023,6 @@ def teste_config():
 
     <a href="/">
     ← Voltar
-    </a>
-
-    """
-
-
-# ============================================================
-# LOGOUT
-# ============================================================
-
-@app.route("/logout")
-def logout():
-
-    session.clear()
-
-    return """
-
-    <h1>
-    🔓 Desconectado
-    </h1>
-
-    <p>
-    Sessão encerrada.
-    </p>
-
-    <a href="/">
-    🔐 Conectar novamente
     </a>
 
     """
