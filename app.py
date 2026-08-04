@@ -8,23 +8,15 @@ import os
 
 app = Flask(__name__)
 
-# Chave usada para proteger a sessão
 app.secret_key = os.environ.get(
     "FLASK_SECRET_KEY",
-    "chave-temporaria-altere-no-render"
+    "chave-temporaria"
 )
 
-# Credenciais do Mercado Livre
 CLIENT_ID = os.environ.get("ML_CLIENT_ID")
 CLIENT_SECRET = os.environ.get("ML_CLIENT_SECRET")
 
-# IMPORTANTE:
-# Esta URL precisa ser exatamente igual à cadastrada
-# na aplicação do Mercado Livre.
-REDIRECT_URI = os.environ.get(
-    "ML_REDIRECT_URI",
-    "https://robo-ofertas-ml.onrender.com/"
-)
+REDIRECT_URI = "https://robo-ofertas-ml.onrender.com/"
 
 
 @app.route("/")
@@ -33,32 +25,27 @@ def home():
     code = request.args.get("code")
     state = request.args.get("state")
 
-    # Verifica configurações antes de iniciar o OAuth
     if not CLIENT_ID:
         return "ML_CLIENT_ID não configurado no Render.", 500
 
     if not CLIENT_SECRET:
         return "ML_CLIENT_SECRET não configurado no Render.", 500
 
-    # --------------------------------------------------
-    # RETORNO DO MERCADO LIVRE COM O CODE
-    # --------------------------------------------------
+    # -----------------------------------------
+    # RETORNO DO MERCADO LIVRE
+    # -----------------------------------------
 
     if code:
 
-        # Verifica o state
         if state != session.get("state"):
             return "Erro: state inválido.", 400
 
-        # Recupera o code_verifier usado no PKCE
         code_verifier = session.get("code_verifier")
 
         if not code_verifier:
             return "Erro: code_verifier não encontrado.", 400
 
-        # --------------------------------------------------
-        # TROCA O CODE PELO ACCESS TOKEN
-        # --------------------------------------------------
+        # Troca CODE por ACCESS TOKEN
 
         response = requests.post(
             "https://api.mercadolibre.com/oauth/token",
@@ -87,9 +74,7 @@ def home():
         if not access_token:
             return "Erro: Access Token não recebido.", 400
 
-        # --------------------------------------------------
-        # CONSULTA A CONTA
-        # --------------------------------------------------
+        # Consulta conta
 
         user_response = requests.get(
             "https://api.mercadolibre.com/users/me",
@@ -107,12 +92,17 @@ def home():
 
         user_data = user_response.json()
 
-        nickname = user_data.get("nickname", "usuário")
-        user_id = user_data.get("id", "não informado")
+        nickname = user_data.get(
+            "nickname",
+            "usuário"
+        )
 
-        # --------------------------------------------------
-        # SALVA OS TOKENS NA SESSÃO
-        # --------------------------------------------------
+        user_id = user_data.get(
+            "id",
+            "não informado"
+        )
+
+        # Salva token
 
         session["access_token"] = access_token
 
@@ -147,6 +137,16 @@ def home():
 
             <hr>
 
+            <h2>🧪 Teste da API</h2>
+
+            <p>
+                <a href="/teste">
+                    Testar /users/me
+                </a>
+            </p>
+
+            <hr>
+
             <h2>🔎 Buscar produtos</h2>
 
             <form action="/buscar" method="get">
@@ -155,12 +155,12 @@ def home():
                     type="text"
                     name="q"
                     placeholder="Digite um produto"
+                    required
                     style="
                         padding:10px;
                         width:250px;
                         font-size:16px;
                     "
-                    required
                 >
 
                 <button
@@ -180,9 +180,9 @@ def home():
         """
 
 
-    # --------------------------------------------------
-    # INICIA O LOGIN NO MERCADO LIVRE
-    # --------------------------------------------------
+    # -----------------------------------------
+    # INICIAR OAUTH
+    # -----------------------------------------
 
     code_verifier = secrets.token_urlsafe(64)
 
@@ -243,36 +243,103 @@ def home():
     """
 
 
-@app.route("/buscar")
-def buscar():
+# ==================================================
+# TESTE DO TOKEN
+# ==================================================
 
-    termo = request.args.get("q", "").strip()
-
-    if not termo:
-        return "Digite um produto para pesquisar.", 400
-
-    # --------------------------------------------------
-    # RECUPERA O ACCESS TOKEN
-    # --------------------------------------------------
+@app.route("/teste")
+def teste():
 
     access_token = session.get("access_token")
 
     if not access_token:
+
         return """
-        <h1>Conta não conectada</h1>
+        <h1>❌ Token não encontrado</h1>
 
         <p>
-            Conecte sua conta do Mercado Livre novamente.
+            Primeiro conecte sua conta do Mercado Livre.
         </p>
+
+        <a href="/">
+            ← Voltar
+        </a>
+        """, 401
+
+    response = requests.get(
+        "https://api.mercadolibre.com/users/me",
+        headers={
+            "Authorization": f"Bearer {access_token}"
+        },
+        timeout=30,
+    )
+
+    print("==============================")
+    print("TESTE /users/me")
+    print("STATUS:", response.status_code)
+    print("RESPOSTA:", response.text)
+    print("==============================")
+
+    return f"""
+    <!DOCTYPE html>
+    <html>
+
+    <head>
+        <meta charset="UTF-8">
+        <title>Teste API</title>
+    </head>
+
+    <body>
+
+        <h1>🧪 Teste /users/me</h1>
+
+        <p>
+            Status da API:
+            <strong>{response.status_code}</strong>
+        </p>
+
+        <pre>{response.text}</pre>
+
+        <hr>
+
+        <a href="/">
+            ← Voltar
+        </a>
+
+    </body>
+
+    </html>
+    """, response.status_code
+
+
+# ==================================================
+# BUSCA DE PRODUTOS
+# ==================================================
+
+@app.route("/buscar")
+def buscar():
+
+    termo = request.args.get(
+        "q",
+        ""
+    ).strip()
+
+    if not termo:
+        return "Digite um produto para pesquisar.", 400
+
+    access_token = session.get(
+        "access_token"
+    )
+
+    if not access_token:
+
+        return """
+        <h1>❌ Conta não conectada</h1>
 
         <a href="/">
             Conectar Mercado Livre
         </a>
         """, 401
-
-    # --------------------------------------------------
-    # ENVIA O TOKEN PARA A API
-    # --------------------------------------------------
 
     headers = {
         "Authorization": f"Bearer {access_token}"
@@ -288,35 +355,16 @@ def buscar():
         timeout=30,
     )
 
-    # --------------------------------------------------
-    # DIAGNÓSTICO
-    # --------------------------------------------------
-
-    print("================================")
-    print("TESTE API MERCADO LIVRE")
-    print("Endpoint: /sites/MLB/search")
-    print("Termo:", termo)
-    print("Status:", response.status_code)
-    print("Resposta:", response.text)
-    print("================================")
-
-    # --------------------------------------------------
-    # ERRO DA API
-    # --------------------------------------------------
+    print("==============================")
+    print("TESTE /sites/MLB/search")
+    print("TERMO:", termo)
+    print("STATUS:", response.status_code)
+    print("RESPOSTA:", response.text)
+    print("==============================")
 
     if response.status_code != 200:
 
         return f"""
-        <!DOCTYPE html>
-        <html>
-
-        <head>
-            <meta charset="UTF-8">
-            <title>Erro na busca</title>
-        </head>
-
-        <body>
-
         <h1>❌ Erro na busca</h1>
 
         <p>
@@ -331,18 +379,14 @@ def buscar():
         <a href="/">
             ← Voltar
         </a>
-
-        </body>
-        </html>
         """, response.status_code
-
-    # --------------------------------------------------
-    # PROCESSA RESULTADOS
-    # --------------------------------------------------
 
     data = response.json()
 
-    produtos = data.get("results", [])
+    produtos = data.get(
+        "results",
+        []
+    )
 
     html = f"""
     <!DOCTYPE html>
@@ -350,42 +394,17 @@ def buscar():
 
     <head>
         <meta charset="UTF-8">
-        <title>Busca - {termo}</title>
 
-        <style>
-
-            body {{
-                font-family: Arial, sans-serif;
-                max-width: 800px;
-                margin: auto;
-                padding: 20px;
-            }}
-
-            .produto {{
-                border: 1px solid #ddd;
-                border-radius: 10px;
-                padding: 15px;
-                margin: 15px 0;
-            }}
-
-            .produto img {{
-                width: 150px;
-                height: 150px;
-                object-fit: contain;
-            }}
-
-            .preco {{
-                font-size: 20px;
-                font-weight: bold;
-            }}
-
-        </style>
-
+        <title>
+            Busca - {termo}
+        </title>
     </head>
 
     <body>
 
-    <h1>🔎 Resultados para: {termo}</h1>
+    <h1>
+        🔎 Resultados para: {termo}
+    </h1>
 
     <a href="/">
         ← Voltar
@@ -425,19 +444,31 @@ def buscar():
         )
 
         html += f"""
-        <div class="produto">
+        <div style="
+            border:1px solid #ddd;
+            border-radius:10px;
+            padding:15px;
+            margin:15px 0;
+            max-width:600px;
+        ">
 
             <img
                 src="{imagem}"
-                alt="{titulo}"
+                style="
+                    width:150px;
+                    height:150px;
+                    object-fit:contain;
+                "
             >
 
             <h3>
                 {titulo}
             </h3>
 
-            <p class="preco">
-                R$ {preco}
+            <p>
+                <strong>
+                    R$ {preco}
+                </strong>
             </p>
 
             <a
