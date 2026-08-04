@@ -6,7 +6,7 @@ import requests
 import html
 
 from urllib.parse import urlencode
-from flask import Flask, request, session, redirect
+from flask import Flask, request, session
 
 app = Flask(__name__)
 
@@ -17,30 +17,27 @@ app = Flask(__name__)
 CLIENT_ID = os.getenv("ML_CLIENT_ID")
 CLIENT_SECRET = os.getenv("ML_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("ML_REDIRECT_URI")
-
-SECRET_KEY = os.getenv(
-    "SECRET_KEY",
-    secrets.token_hex(32)
-)
+SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_hex(32))
 
 app.secret_key = SECRET_KEY
 
-SITE_ID = "MLB"
+# ============================================================
+# CONFIGURAÇÃO DE SESSÃO
+# ============================================================
 
-API_BASE = "https://api.mercadolibre.com"
-
+app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 # ============================================================
 # FORMATAÇÃO
 # ============================================================
 
 def formatar_preco(valor):
-
     if valor is None:
         return "Preço indisponível"
 
     try:
-
         valor = float(valor)
 
         return (
@@ -50,78 +47,75 @@ def formatar_preco(valor):
             .replace("X", ".")
         )
 
-    except:
-
+    except Exception:
         return "Preço indisponível"
 
 
 def escapar(valor):
-
-    return html.escape(
-        str(valor or "")
-    )
-
-
-def calcular_desconto(
-    preco_atual,
-    preco_original
-):
-
-    try:
-
-        atual = float(preco_atual)
-        original = float(preco_original)
-
-        if original > atual:
-
-            desconto = (
-                (original - atual)
-                / original
-                * 100
-            )
-
-            return round(
-                desconto
-            )
-
-    except:
-
-        pass
-
-    return 0
+    return html.escape(str(valor or ""))
 
 
 # ============================================================
-# REQUISIÇÃO À API
+# REQUISIÇÃO AO MERCADO LIVRE
 # ============================================================
 
-def api_get(
-    endpoint,
-    access_token,
-    params=None
-):
+def buscar_mercado_livre(termo, limit=50, offset=0):
 
+    url = "https://api.mercadolibre.com/sites/MLB/search"
+
+    params = {
+        "q": termo,
+        "limit": limit,
+        "offset": offset,
+    }
+
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0",
+    }
+
+    # Primeiro tenta sem token porque a busca de anúncios
+    # é uma consulta pública.
     try:
 
         response = requests.get(
-
-            API_BASE + endpoint,
-
-            headers={
-                "Authorization":
-                    f"Bearer {access_token}"
-            },
-
-            params=params or {},
-
+            url,
+            params=params,
+            headers=headers,
             timeout=30,
         )
 
-        return response
+        if response.status_code == 200:
+            return response
 
-    except requests.RequestException as erro:
+    except requests.RequestException:
+        pass
 
-        return None
+    # Se a API exigir autenticação, tenta novamente
+    # utilizando o token salvo.
+    access_token = session.get("access_token")
+
+    if access_token:
+
+        headers["Authorization"] = (
+            f"Bearer {access_token}"
+        )
+
+        try:
+
+            response = requests.get(
+                url,
+                params=params,
+                headers=headers,
+                timeout=30,
+            )
+
+            return response
+
+        except requests.RequestException:
+            return None
+
+    return None
 
 
 # ============================================================
@@ -131,278 +125,144 @@ def api_get(
 @app.route("/")
 def home():
 
-    code = request.args.get(
-        "code"
-    )
-
-    state = request.args.get(
-        "state"
-    )
-
-
-    # ========================================================
-    # VERIFICA CONFIGURAÇÕES
-    # ========================================================
+    code = request.args.get("code")
+    state = request.args.get("state")
 
     if not CLIENT_ID:
-
-        return (
-            "ML_CLIENT_ID não configurado no Render.",
-            500
-        )
-
+        return "ML_CLIENT_ID não configurado no Render.", 500
 
     if not CLIENT_SECRET:
-
-        return (
-            "ML_CLIENT_SECRET não configurado no Render.",
-            500
-        )
-
+        return "ML_CLIENT_SECRET não configurado no Render.", 500
 
     if not REDIRECT_URI:
-
-        return (
-            "ML_REDIRECT_URI não configurado no Render.",
-            500
-        )
-
+        return "ML_REDIRECT_URI não configurado no Render.", 500
 
     # ========================================================
-    # CALLBACK DO MERCADO LIVRE
+    # CALLBACK OAUTH
     # ========================================================
 
     if code:
 
-        saved_state = session.get(
-            "state"
-        )
-
+        saved_state = session.get("state")
 
         if not saved_state:
 
             return """
             <h2>Erro: sessão expirada.</h2>
-
-            <p>
-                Volte para o início e conecte novamente sua conta.
-            </p>
-
-            <a href="/">
-                Voltar
-            </a>
+            <p>Volte e conecte novamente sua conta.</p>
+            <a href="/">Voltar</a>
             """, 400
-
 
         if state != saved_state:
 
             return """
             <h2>Erro: state inválido.</h2>
-
-            <a href="/">
-                Voltar
-            </a>
+            <a href="/">Voltar</a>
             """, 400
 
-
-        code_verifier = session.get(
-            "code_verifier"
-        )
-
+        code_verifier = session.get("code_verifier")
 
         if not code_verifier:
 
             return """
-            <h2>
-                Erro: code_verifier não encontrado.
-            </h2>
-
-            <a href="/">
-                Voltar
-            </a>
+            <h2>Erro: code_verifier não encontrado.</h2>
+            <a href="/">Voltar</a>
             """, 400
-
-
-        # ====================================================
-        # TROCA CODE POR TOKEN
-        # ====================================================
 
         response = requests.post(
 
-            f"{API_BASE}/oauth/token",
+            "https://api.mercadolibre.com/oauth/token",
 
             data={
-
-                "grant_type":
-                    "authorization_code",
-
-                "client_id":
-                    CLIENT_ID,
-
-                "client_secret":
-                    CLIENT_SECRET,
-
-                "code":
-                    code,
-
-                "redirect_uri":
-                    REDIRECT_URI,
-
-                "code_verifier":
-                    code_verifier,
+                "grant_type": "authorization_code",
+                "client_id": CLIENT_ID,
+                "client_secret": CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": REDIRECT_URI,
+                "code_verifier": code_verifier,
             },
 
             timeout=30,
         )
-
 
         if response.status_code != 200:
 
             return f"""
             <h1>Erro ao obter token</h1>
 
-            <p>
-                Status:
-                <strong>
-                    {response.status_code}
-                </strong>
-            </p>
+            <p>Status: {response.status_code}</p>
 
-            <pre>
-{escapar(response.text)}
-            </pre>
+            <pre>{escapar(response.text)}</pre>
 
-            <a href="/">
-                Voltar
-            </a>
+            <a href="/">Voltar</a>
             """, 400
-
 
         token_data = response.json()
 
-
-        access_token = token_data.get(
-            "access_token"
-        )
-
+        access_token = token_data.get("access_token")
 
         if not access_token:
 
             return """
-            <h2>
-                Access Token não recebido.
-            </h2>
-
-            <a href="/">
-                Voltar
-            </a>
+            <h2>Access Token não recebido.</h2>
+            <a href="/">Voltar</a>
             """, 400
 
-
-        # ====================================================
-        # LIMPA PKCE
-        # ====================================================
-
-        session.pop(
-            "code_verifier",
-            None
-        )
-
-        session.pop(
-            "state",
-            None
-        )
-
+        # Limpa dados PKCE
+        session.pop("code_verifier", None)
+        session.pop("state", None)
 
         # ====================================================
         # CONSULTA USUÁRIO
         # ====================================================
 
-        user_response = api_get(
+        user_response = requests.get(
 
-            "/users/me",
+            "https://api.mercadolibre.com/users/me",
 
-            access_token
+            headers={
+                "Authorization":
+                    f"Bearer {access_token}"
+            },
+
+            timeout=30,
         )
-
-
-        if not user_response:
-
-            return """
-            <h2>
-                Erro de conexão com Mercado Livre.
-            </h2>
-
-            <a href="/">
-                Voltar
-            </a>
-            """, 500
-
 
         if user_response.status_code != 200:
 
             return f"""
-            <h1>
-                Erro ao consultar conta
-            </h1>
+            <h1>Erro ao consultar conta</h1>
 
-            <p>
-                Status:
-                {user_response.status_code}
-            </p>
+            <pre>{escapar(user_response.text)}</pre>
 
-            <pre>
-{escapar(user_response.text)}
-            </pre>
-
-            <a href="/">
-                Voltar
-            </a>
+            <a href="/">Voltar</a>
             """, 400
 
-
         user_data = user_response.json()
-
 
         nickname = user_data.get(
             "nickname",
             "usuário"
         )
 
-
         user_id = user_data.get(
             "id",
             "não informado"
         )
 
-
-        # ====================================================
-        # GUARDA TOKEN NA SESSÃO
-        # ====================================================
-
-        session["access_token"] = (
-            access_token
-        )
-
-        session["user_id"] = (
-            user_id
-        )
-
+        session["access_token"] = access_token
+        session["user_id"] = user_id
 
         return pagina_principal(
             nickname,
             user_id
         )
 
-
     # ========================================================
     # CRIA PKCE
     # ========================================================
 
-    code_verifier = secrets.token_urlsafe(
-        64
-    )
-
+    code_verifier = secrets.token_urlsafe(64)
 
     code_challenge = (
         base64.urlsafe_b64encode(
@@ -414,48 +274,24 @@ def home():
         .decode()
     )
 
+    state = secrets.token_urlsafe(32)
 
-    state = secrets.token_urlsafe(
-        32
-    )
-
-
-    session["code_verifier"] = (
-        code_verifier
-    )
-
+    session["code_verifier"] = code_verifier
     session["state"] = state
 
-
     params = {
-
-        "response_type":
-            "code",
-
-        "client_id":
-            CLIENT_ID,
-
-        "redirect_uri":
-            REDIRECT_URI,
-
-        "state":
-            state,
-
-        "code_challenge":
-            code_challenge,
-
-        "code_challenge_method":
-            "S256",
+        "response_type": "code",
+        "client_id": CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "state": state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
     }
 
-
     auth_url = (
-
-        "https://auth.mercadolivre.com.br/"
-        "authorization?"
+        "https://auth.mercadolivre.com.br/authorization?"
         + urlencode(params)
     )
-
 
     return f"""
     <!DOCTYPE html>
@@ -468,65 +304,40 @@ def home():
 
         <meta
             name="viewport"
-            content="width=device-width,
-                     initial-scale=1.0"
+            content="width=device-width, initial-scale=1.0"
         >
 
-        <title>
-            Robô Ofertas ML
-        </title>
-
-        <style>
-
-            body {{
-                font-family: Arial;
-                background: #f5f5f5;
-                padding: 30px;
-                text-align: center;
-            }}
-
-            .box {{
-                max-width: 500px;
-                margin: auto;
-                background: white;
-                padding: 30px;
-                border-radius: 15px;
-            }}
-
-            button {{
-                padding: 15px 25px;
-                font-size: 18px;
-                border: 0;
-                border-radius: 8px;
-                background: #3483fa;
-                color: white;
-            }}
-
-        </style>
+        <title>Robô Ofertas ML</title>
 
     </head>
 
-    <body>
+    <body style="
+        font-family:Arial;
+        background:#f5f5f5;
+        padding:30px;
+        text-align:center;
+    ">
 
-        <div class="box">
+        <h1>🤖 Robô Ofertas ML</h1>
 
-            <h1>
-                🤖 Robô Ofertas ML
-            </h1>
+        <p>
+            Conecte sua conta do Mercado Livre
+        </p>
 
-            <p>
-                Conecte sua conta do Mercado Livre
-            </p>
+        <a href="{auth_url}">
 
-            <a href="{auth_url}">
+            <button style="
+                padding:15px 25px;
+                font-size:18px;
+                border:0;
+                border-radius:8px;
+                background:#3483fa;
+                color:white;
+            ">
+                🔐 Conectar Mercado Livre
+            </button>
 
-                <button>
-                    🔐 Conectar Mercado Livre
-                </button>
-
-            </a>
-
-        </div>
+        </a>
 
     </body>
 
@@ -538,10 +349,7 @@ def home():
 # PÁGINA PRINCIPAL
 # ============================================================
 
-def pagina_principal(
-    nickname,
-    user_id
-):
+def pagina_principal(nickname, user_id):
 
     return f"""
     <!DOCTYPE html>
@@ -554,13 +362,10 @@ def pagina_principal(
 
         <meta
             name="viewport"
-            content="width=device-width,
-                     initial-scale=1.0"
+            content="width=device-width, initial-scale=1.0"
         >
 
-        <title>
-            Robô Ofertas ML
-        </title>
+        <title>Robô Ofertas ML</title>
 
         <style>
 
@@ -597,7 +402,6 @@ def pagina_principal(
                 border-radius: 8px;
                 background: #3483fa;
                 color: white;
-                cursor: pointer;
             }}
 
         </style>
@@ -608,44 +412,25 @@ def pagina_principal(
 
         <div class="container">
 
-            <h1>
-                🤖 Robô Ofertas ML
-            </h1>
+            <h1>🤖 Robô Ofertas ML</h1>
 
-            <p>
-                ✅ Mercado Livre conectado!
-            </p>
+            <p>✅ Mercado Livre conectado!</p>
 
             <p>
                 Usuário:
-                <strong>
-                    {escapar(nickname)}
-                </strong>
+                <strong>{escapar(nickname)}</strong>
             </p>
 
             <p>
                 ID:
-                <strong>
-                    {escapar(user_id)}
-                </strong>
+                <strong>{escapar(user_id)}</strong>
             </p>
 
             <hr>
 
-            <h2>
-                🔎 Produtos atuais
-            </h2>
+            <h2>🔎 Buscar produtos atuais</h2>
 
-            <p>
-                Pesquise qualquer produto.
-                Os resultados serão organizados
-                priorizando os anúncios com mais vendas.
-            </p>
-
-            <form
-                action="/buscar"
-                method="get"
-            >
+            <form action="/buscar" method="get">
 
                 <input
                     type="text"
@@ -655,26 +440,10 @@ def pagina_principal(
                 >
 
                 <button type="submit">
-                    🔥 Buscar mais vendidos
+                    🔎 Buscar produtos
                 </button>
 
             </form>
-
-            <br>
-
-            <a href="/mais-vendidos"
-               style="
-                    display:block;
-                    text-align:center;
-                    background:#ffe600;
-                    padding:14px;
-                    border-radius:8px;
-                    color:#333;
-                    text-decoration:none;
-                    font-weight:bold;
-               ">
-                🏆 Ver produtos mais vendidos
-            </a>
 
         </div>
 
@@ -685,7 +454,7 @@ def pagina_principal(
 
 
 # ============================================================
-# BUSCA DE PRODUTOS
+# BUSCA
 # ============================================================
 
 @app.route("/buscar")
@@ -696,37 +465,12 @@ def buscar():
         ""
     ).strip()
 
-
     if not termo:
 
         return """
-        <h2>
-            Digite um produto.
-        </h2>
-
-        <a href="/">
-            Voltar
-        </a>
+        <h2>Digite um produto para pesquisar.</h2>
+        <a href="/">Voltar</a>
         """, 400
-
-
-    access_token = session.get(
-        "access_token"
-    )
-
-
-    if not access_token:
-
-        return """
-        <h2>
-            Conta não conectada.
-        </h2>
-
-        <a href="/">
-            Conectar Mercado Livre
-        </a>
-        """, 401
-
 
     try:
 
@@ -737,160 +481,85 @@ def buscar():
             )
         )
 
-    except:
+    except Exception:
 
         offset = 0
 
-
-    # ========================================================
-    # 50 RESULTADOS
-    # ========================================================
-
+    # Limite máximo por página
     limit = 50
 
+    # Evita offset negativo
+    offset = max(0, offset)
 
-    # ========================================================
-    # BUSCA ATUAL
-    #
-    # sold_quantity_desc:
-    # prioriza os anúncios com maior quantidade vendida.
-    # ========================================================
-
-    response = api_get(
-
-        f"/sites/{SITE_ID}/search",
-
-        access_token,
-
-        params={
-
-            "q":
-                termo,
-
-            "limit":
-                limit,
-
-            "offset":
-                offset,
-
-            "status":
-                "active",
-
-            "sort":
-                "sold_quantity_desc",
-        }
+    response = buscar_mercado_livre(
+        termo,
+        limit,
+        offset
     )
 
+    if response is None:
 
-    # ========================================================
-    # FALLBACK
-    #
-    # Algumas buscas podem não aceitar a ordenação.
-    # Nesse caso fazemos uma busca normal e ordenamos
-    # localmente pelos dados retornados.
-    # ========================================================
+        return """
+        <h1>❌ Erro na busca</h1>
 
-    if not response:
+        <p>
+            Não foi possível conectar ao Mercado Livre.
+        </p>
 
-        return erro_api(
-            "Erro de conexão com Mercado Livre."
-        )
+        <p>
+            Tente novamente.
+        </p>
 
+        <a href="/">
+            ← Voltar
+        </a>
+        """, 500
 
     if response.status_code != 200:
 
-        response_fallback = api_get(
+        return f"""
+        <h1>❌ Erro na busca</h1>
 
-            f"/sites/{SITE_ID}/search",
+        <p>
+            Status da API:
+            <strong>{response.status_code}</strong>
+        </p>
 
-            access_token,
+        <pre>{escapar(response.text)}</pre>
 
-            params={
+        <a href="/">
+            ← Voltar
+        </a>
+        """, response.status_code
 
-                "q":
-                    termo,
+    try:
 
-                "limit":
-                    limit,
+        data = response.json()
 
-                "offset":
-                    offset,
+    except Exception:
 
-                "status":
-                    "active",
-            }
-        )
+        return """
+        <h1>❌ Resposta inválida</h1>
 
-
-        if (
-            response_fallback
-            and
-            response_fallback.status_code == 200
-        ):
-
-            response = response_fallback
-
-        else:
-
-            return erro_api(
-                response.text,
-                response.status_code
-            )
-
-
-    data = response.json()
-
+        <a href="/">
+            ← Voltar
+        </a>
+        """, 500
 
     produtos = data.get(
         "results",
         []
     )
 
-
-    # ========================================================
-    # REMOVE PRODUTOS SEM PREÇO
-    # ========================================================
-
-    produtos = [
-
-        produto
-
-        for produto in produtos
-
-        if produto.get("price") is not None
-
-    ]
-
-
-    # ========================================================
-    # ORDENA PELOS MAIS VENDIDOS
-    # ========================================================
-
-    produtos.sort(
-
-        key=lambda produto:
-            int(
-                produto.get(
-                    "sold_quantity",
-                    0
-                ) or 0
-            ),
-
-        reverse=True
-    )
-
-
     paging = data.get(
         "paging",
         {}
     )
 
-
     total = paging.get(
         "total",
         0
     )
-
 
     # ========================================================
     # HTML
@@ -907,12 +576,11 @@ def buscar():
 
         <meta
             name="viewport"
-            content="width=device-width,
-                     initial-scale=1.0"
+            content="width=device-width, initial-scale=1.0"
         >
 
         <title>
-            Mais vendidos - {escapar(termo)}
+            Busca - {escapar(termo)}
         </title>
 
         <style>
@@ -942,57 +610,32 @@ def buscar():
                 padding: 15px;
                 margin-bottom: 15px;
                 box-shadow:
-                    0 2px 8px
-                    rgba(0,0,0,.08);
+                    0 2px 8px rgba(0,0,0,.08);
             }}
 
             .produto img {{
-                width: 200px;
-                height: 200px;
+                width: 220px;
+                height: 220px;
                 object-fit: contain;
                 display: block;
                 margin-bottom: 10px;
-                border-radius: 10px;
             }}
 
             .preco {{
-                font-size: 26px;
+                font-size: 25px;
                 font-weight: bold;
                 color: #008000;
                 margin: 8px 0;
             }}
 
-            .preco-original {{
-                color: #777;
-                text-decoration: line-through;
-                font-size: 15px;
-            }}
-
-            .desconto {{
-                display: inline-block;
-                background: #00a650;
-                color: white;
-                padding: 5px 8px;
-                border-radius: 5px;
-                font-weight: bold;
-                margin-bottom: 8px;
-            }}
-
             .vendidos {{
-                font-size: 17px;
-                color: #333;
+                color: #555;
                 margin: 8px 0;
             }}
 
-            .estoque {{
+            .info {{
                 color: #555;
                 margin: 6px 0;
-            }}
-
-            .atualizado {{
-                color: #777;
-                font-size: 13px;
-                margin: 8px 0;
             }}
 
             .botao {{
@@ -1003,12 +646,6 @@ def buscar():
                 border-radius: 8px;
                 text-decoration: none;
                 margin-top: 10px;
-            }}
-
-            .ranking {{
-                font-size: 18px;
-                font-weight: bold;
-                margin-bottom: 8px;
             }}
 
             .paginas {{
@@ -1026,11 +663,6 @@ def buscar():
                 text-decoration: none;
             }}
 
-            .voltar {{
-                display: inline-block;
-                margin-top: 10px;
-            }}
-
         </style>
 
     </head>
@@ -1042,19 +674,22 @@ def buscar():
         <div class="top">
 
             <h1>
-                🔥 {escapar(termo)}
+                🔎 {escapar(termo)}
             </h1>
 
             <p>
                 <strong>
-                    Produtos atuais mais vendidos
+                    {total}
                 </strong>
+                anúncios encontrados
             </p>
 
             <p>
-                Total encontrado:
+                Mostrando:
+                <strong>{offset + 1}</strong>
+                até
                 <strong>
-                    {total}
+                    {min(offset + len(produtos), total)}
                 </strong>
             </p>
 
@@ -1062,233 +697,156 @@ def buscar():
                 🟢 Anúncios ativos
             </p>
 
-            <a
-                class="voltar"
-                href="/"
-            >
+            <a href="/">
                 ← Nova pesquisa
             </a>
 
         </div>
     """
 
-
     if not produtos:
 
         html_page += """
-
         <div class="produto">
-
-            <h2>
-                Nenhum produto encontrado.
-            </h2>
-
+            <h2>Nenhum produto encontrado.</h2>
         </div>
-
         """
-
 
     # ========================================================
     # PRODUTOS
     # ========================================================
 
-    for posicao, produto in enumerate(
-        produtos,
-        start=offset + 1
-    ):
+    for produto in produtos:
 
         item_id = produto.get(
             "id",
             ""
         )
 
-
         titulo = produto.get(
             "title",
             "Produto sem título"
         )
 
-
         preco = produto.get(
             "price"
         )
 
-
-        preco_original = produto.get(
-            "original_price"
-        )
-
-
         vendidos = produto.get(
             "sold_quantity",
             0
-        ) or 0
-
-
-        estoque = produto.get(
-            "available_quantity"
         )
-
 
         link = produto.get(
             "permalink",
             "#"
         )
 
-
         imagem = produto.get(
             "thumbnail",
             ""
         )
-
 
         categoria = produto.get(
             "category_id",
             "Não informada"
         )
 
-
         condicao = produto.get(
             "condition",
+            "Não informada"
+        )
+
+        # Localização
+        endereco = produto.get(
+            "address",
+            {}
+        ) or {}
+
+        cidade = endereco.get(
+            "city_name",
             ""
         )
 
-
-        atualizado = produto.get(
-            "last_updated",
+        estado = endereco.get(
+            "state_name",
             ""
         )
 
+        localizacao = (
+            f"{cidade} - {estado}"
+            if cidade
+            else "Localização não informada"
+        )
+
+        # Escapa textos
+        titulo_html = escapar(titulo)
+        link_html = escapar(link)
+        imagem_html = escapar(imagem)
+        categoria_html = escapar(categoria)
+        condicao_html = escapar(condicao)
+        localizacao_html = escapar(localizacao)
 
         preco_texto = formatar_preco(
             preco
         )
 
-
-        preco_original_texto = ""
-
-
-        if preco_original:
-
-            preco_original_texto = f"""
-            <div class="preco-original">
-                De {formatar_preco(preco_original)}
-            </div>
-            """
-
-
-        desconto = calcular_desconto(
-            preco,
-            preco_original
-        )
-
-
-        desconto_html = ""
-
-
-        if desconto > 0:
-
-            desconto_html = f"""
-            <div class="desconto">
-                🔥 {desconto}% OFF
-            </div>
-            """
-
-
-        estoque_texto = (
-            str(estoque)
-            if estoque is not None
-            else "Não informado"
-        )
-
-
         html_page += f"""
 
         <div class="produto">
 
-            <div class="ranking">
-                🏆 #{posicao}
-            </div>
-
             <img
-                src="{escapar(imagem)}"
-                alt="{escapar(titulo)}"
+                src="{imagem_html}"
+                alt="{titulo_html}"
                 loading="lazy"
             >
 
             <h2>
-                {escapar(titulo)}
+                {titulo_html}
             </h2>
-
-            {desconto_html}
-
-            {preco_original_texto}
 
             <div class="preco">
                 {preco_texto}
             </div>
 
             <div class="vendidos">
-
                 🔥
-                <strong>
-                    {vendidos}
-                </strong>
-
+                <strong>{vendidos}</strong>
                 vendidos
-
             </div>
 
-            <div class="estoque">
-
-                📦 Estoque:
-                <strong>
-                    {escapar(estoque_texto)}
-                </strong>
-
-            </div>
-
-            <div>
-
+            <div class="info">
                 📂 Categoria:
-                {escapar(categoria)}
-
+                {categoria_html}
             </div>
 
-            <div>
+            <div class="info">
+                📍
+                {localizacao_html}
+            </div>
 
+            <div class="info">
                 🏷️
-                {escapar(condicao)}
-
+                {condicao_html}
             </div>
 
-            <div class="atualizado">
-
-                🕒 Última atualização:
-                {escapar(atualizado)}
-
-            </div>
-
-            <div class="atualizado">
-
-                ID:
+            <div class="info">
+                🆔
                 {escapar(item_id)}
-
             </div>
 
             <a
                 class="botao"
-                href="{escapar(link)}"
+                href="{link_html}"
                 target="_blank"
-                rel="noopener"
+                rel="noopener noreferrer"
             >
-                🛒 Ver anúncio atual
+                🛒 Ver anúncio
             </a>
 
         </div>
 
         """
-
 
     # ========================================================
     # PAGINAÇÃO
@@ -1298,7 +856,6 @@ def buscar():
         <div class="paginas">
     """
 
-
     if offset > 0:
 
         anterior = max(
@@ -1306,307 +863,39 @@ def buscar():
             offset - limit
         )
 
-
         html_page += f"""
-
-        <a
-            href="/buscar?q={escapar(termo)}&offset={anterior}"
-        >
-            ← Anterior
-        </a>
-
+            <a
+                href="/buscar?q={escapar(termo)}&offset={anterior}"
+            >
+                ← Anterior
+            </a>
         """
 
     else:
 
         html_page += "<span></span>"
 
-
     if offset + limit < total:
 
         proximo = offset + limit
 
-
         html_page += f"""
-
-        <a
-            href="/buscar?q={escapar(termo)}&offset={proximo}"
-        >
-            Próximos 50 →
-        </a>
-
-        """
-
-
-    html_page += """
-
-        </div>
-
-    </div>
-
-    </body>
-
-    </html>
-    """
-
-
-    return html_page
-
-
-# ============================================================
-# MAIS VENDIDOS
-# ============================================================
-
-@app.route("/mais-vendidos")
-def mais_vendidos():
-
-    access_token = session.get(
-        "access_token"
-    )
-
-
-    if not access_token:
-
-        return redirect("/")
-
-
-    # ========================================================
-    # CATEGORIAS / HIGHLIGHTS
-    #
-    # A API oficial disponibiliza o TOP 20 por categoria.
-    # ========================================================
-
-    response = api_get(
-
-        f"/highlights/{SITE_ID}/category/MLB1055",
-
-        access_token
-    )
-
-
-    # Se a categoria acima não estiver disponível,
-    # mostramos uma busca geral como fallback.
-
-    if (
-        not response
-        or
-        response.status_code != 200
-    ):
-
-        return redirect(
-            "/buscar?q=ofertas"
-        )
-
-
-    data = response.json()
-
-
-    produtos = data.get(
-        "content",
-        []
-    )
-
-
-    html_page = """
-
-    <!DOCTYPE html>
-
-    <html>
-
-    <head>
-
-        <meta charset="UTF-8">
-
-        <meta
-            name="viewport"
-            content="width=device-width,
-                     initial-scale=1.0"
-        >
-
-        <title>
-            Mais vendidos
-        </title>
-
-        <style>
-
-            body {
-                font-family: Arial;
-                background: #f5f5f5;
-                padding: 15px;
-            }
-
-            .container {
-                max-width: 900px;
-                margin: auto;
-            }
-
-            .box {
-                background: white;
-                padding: 20px;
-                border-radius: 12px;
-                margin-bottom: 15px;
-            }
-
-            .botao {
-                display: inline-block;
-                background: #3483fa;
-                color: white;
-                padding: 12px 18px;
-                border-radius: 8px;
-                text-decoration: none;
-            }
-
-        </style>
-
-    </head>
-
-    <body>
-
-    <div class="container">
-
-        <div class="box">
-
-            <h1>
-                🏆 Mais vendidos
-            </h1>
-
-            <p>
-                Ranking atual disponibilizado pelo
-                Mercado Livre.
-            </p>
-
             <a
-                class="botao"
-                href="/"
+                href="/buscar?q={escapar(termo)}&offset={proximo}"
             >
-                ← Voltar
+                Próximos 50 →
             </a>
-
-        </div>
-
-    """
-
-
-    for posicao, produto in enumerate(
-        produtos,
-        start=1
-    ):
-
-        produto_id = (
-            produto.get("id")
-            if isinstance(
-                produto,
-                dict
-            )
-            else ""
-        )
-
-
-        html_page += f"""
-
-        <div class="box">
-
-            <h2>
-                #{posicao}
-            </h2>
-
-            <p>
-                Produto:
-                <strong>
-                    {escapar(produto_id)}
-                </strong>
-            </p>
-
-        </div>
-
         """
 
-
     html_page += """
-
+        </div>
     </div>
 
     </body>
-
     </html>
-
     """
 
-
     return html_page
-
-
-# ============================================================
-# ERRO DA API
-# ============================================================
-
-def erro_api(
-    mensagem,
-    status=500
-):
-
-    return f"""
-
-    <!DOCTYPE html>
-
-    <html>
-
-    <head>
-
-        <meta charset="UTF-8">
-
-        <meta
-            name="viewport"
-            content="width=device-width,
-                     initial-scale=1.0"
-        >
-
-        <title>
-            Erro
-        </title>
-
-    </head>
-
-    <body style="
-        font-family:Arial;
-        padding:30px;
-        background:#f5f5f5;
-    ">
-
-        <div style="
-            max-width:700px;
-            margin:auto;
-            background:white;
-            padding:25px;
-            border-radius:12px;
-        ">
-
-            <h1>
-                ❌ Erro na busca
-            </h1>
-
-            <p>
-                Status da API:
-                <strong>
-                    {status}
-                </strong>
-            </p>
-
-            <pre>
-{escapar(mensagem)}
-            </pre>
-
-            <a href="/">
-                ← Voltar
-            </a>
-
-        </div>
-
-    </body>
-
-    </html>
-
-    """, status
 
 
 # ============================================================
@@ -1617,10 +906,7 @@ def erro_api(
 def teste_config():
 
     return f"""
-
-    <h1>
-        🧪 Configuração
-    </h1>
+    <h1>🧪 Configuração</h1>
 
     <p>
         CLIENT_ID:
@@ -1639,9 +925,7 @@ def teste_config():
     <p>
         REDIRECT_URI:
         <strong>
-            {escapar(REDIRECT_URI)
-             if REDIRECT_URI
-             else "FALTANDO"}
+            {escapar(REDIRECT_URI) if REDIRECT_URI else "FALTANDO"}
         </strong>
     </p>
 
@@ -1657,20 +941,7 @@ def teste_config():
     <a href="/">
         ← Voltar
     </a>
-
     """
-
-
-# ============================================================
-# LOGOUT
-# ============================================================
-
-@app.route("/logout")
-def logout():
-
-    session.clear()
-
-    return redirect("/")
 
 
 # ============================================================
@@ -1680,9 +951,7 @@ def logout():
 if __name__ == "__main__":
 
     app.run(
-
         host="0.0.0.0",
-
         port=int(
             os.getenv(
                 "PORT",
