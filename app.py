@@ -8,7 +8,6 @@ import html
 from urllib.parse import urlencode, quote
 from flask import Flask, request, session
 
-
 app = Flask(__name__)
 
 
@@ -27,8 +26,6 @@ SECRET_KEY = os.getenv(
 
 app.secret_key = SECRET_KEY
 
-
-app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
@@ -38,55 +35,40 @@ API_BASE = "https://api.mercadolibre.com"
 SITE_ID = "MLB"
 
 
-
 # ============================================================
-# CONFIGURAÇÃO DE REVENDA
-# ============================================================
-
-MARGEM_PADRAO = 15
-
-LUCRO_MINIMO = 10
-
-
-
-# ============================================================
-# CATEGORIAS DE PRODUTOS
+# CATEGORIAS DE BUSCA
 # ============================================================
 
 CATEGORIAS = {
 
-    "celulares": {
-        "nome": "📱 Celulares",
-        "categoria": "MLB1055"
-    },
+    "celulares":
+    "MLB1055",
 
-    "roupas": {
-        "nome": "👕 Roupas",
-        "categoria": "MLB1430"
-    },
+    "roupas":
+    "MLB1430",
 
-    "relogios": {
-        "nome": "⌚ Relógios",
-        "categoria": "MLB3937"
-    },
+    "relogios":
+    "MLB3937",
 
-    "eletronicos": {
-        "nome": "🎧 Eletrônicos",
-        "categoria": "MLB1000"
-    },
+    "eletronicos":
+    "MLB1000",
 
-    "casa": {
-        "nome": "🏠 Casa e decoração",
-        "categoria": "MLB1574"
-    },
+    "informatica":
+    "MLB1648",
 
-    "ferramentas": {
-        "nome": "🔧 Ferramentas",
-        "categoria": "MLB263532"
-    }
+    "beleza":
+    "MLB1246"
 
 }
 
+
+# ============================================================
+# CONFIGURAÇÃO DA REVENDA
+# ============================================================
+
+MARGEM_PADRAO = 10
+
+LUCRO_MINIMO_PADRAO = 20
 
 
 # ============================================================
@@ -101,7 +83,6 @@ def escapar(valor):
     )
 
 
-
 def numero(valor):
 
     try:
@@ -110,7 +91,7 @@ def numero(valor):
 
     except:
 
-        return 0
+        return 0.0
 
 
 
@@ -167,15 +148,14 @@ def headers_api():
 
 
 
-
 # ============================================================
-# REQUISIÇÃO MERCADO LIVRE
+# REQUEST MERCADO LIVRE
 # ============================================================
 
 
 def requisicao_get(
-        url,
-        params=None
+    url,
+    params=None
 ):
 
     try:
@@ -192,7 +172,6 @@ def requisicao_get(
 
         )
 
-
     except Exception as erro:
 
         print(
@@ -204,7 +183,7 @@ def requisicao_get(
 
 
 # ============================================================
-# LOGIN MERCADO LIVRE
+# LOGIN INICIAL
 # ============================================================
 
 
@@ -216,11 +195,9 @@ def home():
         "code"
     )
 
-
     state = request.args.get(
         "state"
     )
-
 
 
     if not CLIENT_ID:
@@ -241,11 +218,9 @@ def home():
             return "State inválido",400
 
 
-
         code_verifier = session.get(
             "code_verifier"
         )
-
 
 
         resposta = requests.post(
@@ -272,10 +247,11 @@ def home():
                 "code_verifier":
                 code_verifier
 
-            }
+            },
+
+            timeout=30
 
         )
-
 
 
         if resposta.status_code != 200:
@@ -283,9 +259,7 @@ def home():
             return resposta.text,400
 
 
-
         dados = resposta.json()
-
 
 
         session["access_token"] = (
@@ -293,21 +267,11 @@ def home():
         )
 
 
-        usuario = requisicao_get(
-
-            f"{API_BASE}/users/me"
-
-        ).json()
+        return painel()
 
 
 
-        return tela_inicial(
-            usuario
-        )
-
-
-
-    verifier = (
+    code_verifier = (
         secrets.token_urlsafe(64)
     )
 
@@ -318,7 +282,7 @@ def home():
 
             hashlib.sha256(
 
-                verifier.encode()
+                code_verifier.encode()
 
             ).digest()
 
@@ -331,15 +295,14 @@ def home():
     )
 
 
-
     state = secrets.token_urlsafe(32)
-
 
 
     session["state"] = state
 
-    session["code_verifier"] = verifier
-
+    session["code_verifier"] = (
+        code_verifier
+    )
 
 
     url = (
@@ -371,131 +334,27 @@ def home():
     )
 
 
-
     return f"""
 
     <h1>🤖 Robô Ofertas ML</h1>
 
+    <p>Conecte sua conta Mercado Livre</p>
+
     <a href="{url}">
-
-    <button>
-    🔐 Conectar Mercado Livre
-    </button>
-
+    🔐 Conectar
     </a>
 
-    def buscar_produtos(
-        termo,
-        categoria="todas"
-):
-
-    produtos = []
-
-
-    if categoria == "todas":
-
-        categorias = list(
-            CATEGORIAS.values()
-        )
-
-    else:
-
-        if categoria in CATEGORIAS:
-
-            categorias = [
-                CATEGORIAS[categoria]
-            ]
-
-        else:
-
-            categorias = []
-
-
-
-    for cat in categorias:
-
-
-        resposta = requisicao_get(
-
-            f"{API_BASE}/sites/{SITE_ID}/search",
-
-            {
-
-                "q": termo,
-
-                "category":
-                cat["categoria"],
-
-                "sort":
-                "sold_quantity_desc",
-
-                "limit":
-                50
-
-            }
-
-        )
-
-
-
-        if resposta is None:
-
-            continue
-
-
-
-        if resposta.status_code != 200:
-
-            print(
-                resposta.text
-            )
-
-            continue
-
-
-
-        try:
-
-            dados = resposta.json()
-
-        except:
-
-            continue
-
-
-
-        for item in dados.get(
-            "results",
-            []
-        ):
-
-
-            item["categoria_nome"] = (
-                cat["nome"]
-            )
-
-
-            produtos.append(
-                item
-            )
-
-
-
-    return produtos# ============================================================
-# TELA PRINCIPAL APÓS LOGIN
+    """
+    # ============================================================
+# PAINEL PRINCIPAL
 # ============================================================
 
 
-def tela_inicial(usuario):
+def painel():
 
+    return """
 
-    nome = usuario.get(
-        "nickname",
-        "usuário"
-    )
-
-
-    return f"""
+    <!DOCTYPE html>
 
     <html>
 
@@ -510,77 +369,23 @@ def tela_inicial(usuario):
     Robô Ofertas ML
     </title>
 
-
-    <style>
-
-    body {{
-
-        font-family: Arial;
-
-        background:#f5f5f5;
-
-        padding:20px;
-
-    }}
-
-
-    .box {{
-
-        background:white;
-
-        padding:20px;
-
-        border-radius:15px;
-
-        max-width:700px;
-
-        margin:auto;
-
-    }}
-
-
-    input {{
-
-        width:100%;
-
-        padding:15px;
-
-        font-size:18px;
-
-        margin-bottom:10px;
-
-    }}
-
-
-    button {{
-
-        width:100%;
-
-        padding:15px;
-
-        background:#3483fa;
-
-        color:white;
-
-        border:0;
-
-        border-radius:8px;
-
-        font-size:18px;
-
-    }}
-
-
-    </style>
-
-
     </head>
 
 
-    <body>
+    <body style="
+    font-family:Arial;
+    background:#f5f5f5;
+    padding:20px;
+    ">
 
 
-    <div class="box">
+    <div style="
+    max-width:600px;
+    margin:auto;
+    background:white;
+    padding:25px;
+    border-radius:15px;
+    ">
 
 
     <h1>
@@ -589,30 +394,138 @@ def tela_inicial(usuario):
 
 
     <p>
-    Usuário conectado:
-    <b>{escapar(nome)}</b>
+    ✅ Mercado Livre conectado
     </p>
 
 
+    <hr>
 
-    <form action="/ofertas">
+
+    <h2>
+    🔎 Buscar ofertas
+    </h2>
+
+
+    <form action="/buscar"
+    method="get">
 
 
     <input
+    name="q"
+    placeholder="Ex: iPhone, relógio, camiseta..."
+    style="
+    width:100%;
+    padding:15px;
+    font-size:16px;
+    "
+    required>
 
-    name="produto"
 
-    placeholder="Ex: iPhone, relógio, tênis"
-
-    required
-
-    >
+    <br><br>
 
 
+    <label>
+    Categoria
+    </label>
 
-    <button>
 
-    🔎 Procurar ofertas
+    <select
+    name="categoria"
+    style="
+    width:100%;
+    padding:12px;
+    ">
+
+
+    <option value="todas">
+    Todas
+    </option>
+
+
+    <option value="celulares">
+    📱 Celulares
+    </option>
+
+
+    <option value="roupas">
+    👕 Roupas
+    </option>
+
+
+    <option value="relogios">
+    ⌚ Relógios
+    </option>
+
+
+    <option value="eletronicos">
+    🎧 Eletrônicos
+    </option>
+
+
+    <option value="informatica">
+    💻 Informática
+    </option>
+
+
+    <option value="beleza">
+    💄 Beleza
+    </option>
+
+
+    </select>
+
+
+    <br><br>
+
+
+    <label>
+    📈 Margem de lucro %
+    </label>
+
+
+    <input
+    type="number"
+    name="margem"
+    value="10"
+    style="
+    width:100%;
+    padding:12px;
+    ">
+
+
+    <br><br>
+
+
+    <label>
+    💰 Lucro mínimo
+    </label>
+
+
+    <input
+    type="number"
+    name="lucro_minimo"
+    value="20"
+    style="
+    width:100%;
+    padding:12px;
+    ">
+
+
+    <br><br>
+
+
+    <button
+    style="
+    width:100%;
+    padding:15px;
+    background:#3483fa;
+    color:white;
+    border:0;
+    border-radius:8px;
+    font-size:18px;
+    ">
+
+    🔥 Encontrar ofertas
 
     </button>
 
@@ -631,29 +544,263 @@ def tela_inicial(usuario):
 
 
 
-
-
 # ============================================================
-# PÁGINA DE OFERTAS
+# BUSCA DE PRODUTOS
 # ============================================================
 
 
-@app.route("/ofertas")
-def ofertas():
+def buscar_produtos(
+    termo,
+    categoria="todas"
+):
 
 
-    termo = request.args.get(
+    params = {
 
-        "produto",
 
-        ""
+        "site_id":
+        SITE_ID,
+
+
+        "q":
+        termo,
+
+
+        "limit":
+        30,
+
+
+        "sort":
+        "relevance"
+
+    }
+
+
+    if categoria in CATEGORIAS:
+
+        params["category"] = (
+            CATEGORIAS[categoria]
+        )
+
+
+    resposta = requisicao_get(
+
+        f"{API_BASE}/sites/{SITE_ID}/search",
+
+        params
 
     )
 
 
-    produtos = buscar_ofertas_destaque(
+    if resposta is None:
 
-        termo
+        return []
+
+
+    if resposta.status_code != 200:
+
+        return []
+
+
+    try:
+
+        dados = resposta.json()
+
+        return dados.get(
+            "results",
+            []
+        )
+
+
+    except:
+
+        return []
+
+
+
+# ============================================================
+# CALCULAR OFERTA
+# ============================================================
+
+
+def montar_oferta(
+    produto,
+    margem
+):
+
+
+    preco = numero(
+        produto.get(
+            "price"
+        )
+    )
+
+
+    if preco <= 0:
+
+        return None
+
+
+    preco_venda = (
+
+        preco *
+
+        (
+            1 +
+            margem / 100
+        )
+
+    )
+
+
+    lucro = (
+
+        preco_venda -
+        preco
+
+    )
+
+
+    return {
+
+
+        "id":
+        produto.get(
+            "id"
+        ),
+
+
+        "titulo":
+        produto.get(
+            "title"
+        ),
+
+
+        "imagem":
+        produto.get(
+            "thumbnail"
+        ),
+
+
+        "preco":
+        preco,
+
+
+        "venda":
+        preco_venda,
+
+
+        "lucro":
+        lucro,
+
+
+        "link":
+        produto.get(
+            "permalink"
+        ),
+
+
+        "vendidos":
+        produto.get(
+            "sold_quantity",
+            0
+        )
+
+
+    }# ============================================================
+# PÁGINA DE RESULTADOS
+# ============================================================
+
+
+@app.route("/buscar")
+def buscar():
+
+    termo = request.args.get(
+        "q",
+        ""
+    ).strip()
+
+
+    categoria = request.args.get(
+        "categoria",
+        "todas"
+    )
+
+
+    try:
+
+        margem = float(
+            request.args.get(
+                "margem",
+                10
+            )
+        )
+
+    except:
+
+        margem = 10
+
+
+
+    try:
+
+        lucro_minimo = float(
+            request.args.get(
+                "lucro_minimo",
+                20
+            )
+        )
+
+    except:
+
+        lucro_minimo = 20
+
+
+
+    produtos = buscar_produtos(
+        termo,
+        categoria
+    )
+
+
+    ofertas = []
+
+
+    for produto in produtos:
+
+
+        oferta = montar_oferta(
+            produto,
+            margem
+        )
+
+
+        if oferta is None:
+
+            continue
+
+
+
+        if oferta["lucro"] >= lucro_minimo:
+
+            ofertas.append(
+                oferta
+            )
+
+
+
+    # ordenar pelo mais vendido e maior lucro
+
+    ofertas.sort(
+
+        key=lambda x:
+
+        (
+            x["vendidos"],
+            x["lucro"]
+        ),
+
+        reverse=True
 
     )
 
@@ -661,127 +808,103 @@ def ofertas():
 
     pagina = f"""
 
-    <html>
+    <!DOCTYPE html>
 
+    <html>
 
     <head>
 
-
     <meta charset="UTF-8">
-
 
     <meta name="viewport"
     content="width=device-width, initial-scale=1">
 
 
     <title>
-
     Ofertas
-
     </title>
 
 
     <style>
 
-
     body {{
 
         font-family:Arial;
-
         background:#f5f5f5;
-
         padding:15px;
 
     }}
-
 
 
     .card {{
 
         background:white;
-
-        padding:20px;
-
         border-radius:15px;
-
+        padding:20px;
         margin-bottom:20px;
 
     }}
 
 
-
     img {{
 
-        width:100%;
-
-        max-width:300px;
-
-        border-radius:10px;
+        width:200px;
+        max-height:200px;
+        object-fit:contain;
 
     }}
-
 
 
     .preco {{
 
-        font-size:22px;
-
-        color:#555;
+        font-size:18px;
 
     }}
 
 
+    .venda {{
 
-    .lucro {{
-
-        background:#d4edda;
-
-        padding:12px;
-
-        border-radius:8px;
-
-        font-size:20px;
-
+        color:green;
+        font-size:26px;
         font-weight:bold;
 
     }}
 
 
+    .lucro {{
 
-    .botao {{
-
-        display:block;
-
-        text-align:center;
-
-        padding:15px;
-
-        margin-top:10px;
-
+        background:#d4edda;
+        padding:10px;
         border-radius:8px;
-
-        color:white;
-
-        text-decoration:none;
+        font-size:20px;
 
     }}
 
 
+    .botao {{
 
-    .ml {{
+        display:inline-block;
+        padding:12px 18px;
+        border-radius:8px;
+        text-decoration:none;
+        color:white;
+        margin-top:10px;
+
+    }}
+
+
+    .mercado {{
 
         background:#3483fa;
 
     }}
 
 
-
     .zap {{
 
-        background:#25d366;
+        background:#25D366;
 
     }}
-
 
 
     </style>
@@ -794,49 +917,67 @@ def ofertas():
 
 
     <h1>
-
     🔥 Ofertas encontradas
-
     </h1>
+
+
+    <p>
+    Produto:
+    <b>{escapar(termo)}</b>
+    </p>
+
+
+    <p>
+    Oportunidades:
+    <b>{len(ofertas)}</b>
+    </p>
+
 
     """
 
 
 
-
-    if not produtos:
+    if not ofertas:
 
 
         pagina += """
 
+        <div class="card">
+
         <h2>
-
         😕 Nenhum produto encontrado
-
         </h2>
+
+
+        <p>
+        Tente outro produto ou diminua
+        o lucro mínimo.
+        </p>
+
+
+        </div>
 
         """
 
 
 
-    for produto in produtos:
+    for oferta in ofertas:
 
 
 
         mensagem = (
 
-
             f"🔥 Oferta encontrada!\n\n"
 
-            f"{produto['titulo']}\n\n"
+            f"📦 {oferta['titulo']}\n\n"
 
-            f"💰 Preço:\n"
+            f"💰 Por apenas: "
 
-            f"{formatar_preco(produto['preco_venda'])}\n\n"
+            f"{formatar_preco(oferta['venda'])}\n\n"
 
-            f"🛒 Comprar:\n"
+            f"🛒 Compre aqui:\n"
 
-            f"{produto['link']}"
+            f"{oferta['link']}"
 
         )
 
@@ -846,9 +987,9 @@ def ofertas():
 
             "https://wa.me/?text="
 
-            +
-
-            quote(mensagem)
+            + quote(
+                mensagem
+            )
 
         )
 
@@ -859,26 +1000,14 @@ def ofertas():
         <div class="card">
 
 
-        <img src="{produto['imagem']}">
+        <img src="{escapar(oferta['imagem'])}">
 
 
         <h2>
 
-        {escapar(produto['titulo'])}
+        📦 {escapar(oferta['titulo'])}
 
         </h2>
-
-
-
-        <p>
-
-        📂 Categoria:
-
-        <b>
-        {produto['categoria']}
-        </b>
-
-        </p>
 
 
 
@@ -886,21 +1015,19 @@ def ofertas():
 
         💵 Compra:
 
-        {formatar_preco(produto['preco_compra'])}
+        <b>
+        {formatar_preco(oferta['preco'])}
+        </b>
 
         </p>
 
 
 
-        <p>
+        <p class="venda">
 
-        🏷️ Revenda:
+        🏷️ Venda:
 
-        <b>
-
-        {formatar_preco(produto['preco_venda'])}
-
-        </b>
+        {formatar_preco(oferta['venda'])}
 
         </p>
 
@@ -910,7 +1037,7 @@ def ofertas():
 
         💰 Lucro:
 
-        {formatar_preco(produto['lucro'])}
+        {formatar_preco(oferta['lucro'])}
 
         </div>
 
@@ -920,31 +1047,27 @@ def ofertas():
 
         🔥 Vendidos:
 
-        {produto['vendidos']}
+        {oferta['vendidos']}
 
         </p>
 
 
 
-        <a class="botao ml"
-
-        href="{produto['link']}"
-
+        <a class="botao mercado"
+        href="{escapar(oferta['link'])}"
         target="_blank">
 
-        🛒 Abrir Mercado Livre
+        🛒 Abrir anúncio
 
         </a>
 
 
 
         <a class="botao zap"
-
-        href="{whatsapp}"
-
+        href="{escapar(whatsapp)}"
         target="_blank">
 
-        📲 Enviar oferta WhatsApp
+        📲 Enviar WhatsApp
 
         </a>
 
@@ -959,6 +1082,13 @@ def ofertas():
 
     pagina += """
 
+    <br>
+
+    <a href="/">
+    ← Nova busca
+    </a>
+
+
     </body>
 
     </html>
@@ -968,43 +1098,52 @@ def ofertas():
 
 
     return pagina# ============================================================
-# FILTRO POR CATEGORIA
+# DIAGNÓSTICO
 # ============================================================
 
 
-@app.route("/categoria")
-def categoria():
+@app.route("/diagnostico")
+def diagnostico():
 
 
-    nome = request.args.get(
+    if not session.get(
+        "access_token"
+    ):
 
-        "tipo",
+        return """
 
-        "todas"
+        <h2>
+        ❌ Mercado Livre não conectado
+        </h2>
 
-    )
+        <a href="/">
+        Voltar
+        </a>
 
-
-    produtos = buscar_produtos(
-
-        "",
-
-        nome
-
-    )
+        """
 
 
-    ofertas = analisar_produtos(
 
-        produtos,
+    resposta = requisicao_get(
 
-        MARGEM_PADRAO
+        f"{API_BASE}/users/me"
 
     )
 
 
+    if resposta is None:
 
-    pagina = """
+        texto = "Erro de conexão"
+
+    else:
+
+        texto = resposta.text
+
+
+
+    return f"""
+
+    <!DOCTYPE html>
 
     <html>
 
@@ -1016,212 +1155,48 @@ def categoria():
     content="width=device-width, initial-scale=1">
 
     <title>
-    Categorias
+    Diagnóstico
     </title>
 
     </head>
 
 
-    <body style="font-family:Arial;padding:20px">
-
-
-    <h1>
-    🔥 Produtos em alta
-    </h1>
-
-
-    """
-
-
-
-    for produto in ofertas:
-
-
-        mensagem = (
-
-            "🔥 Oferta especial!\n\n"
-
-            + produto["titulo"]
-
-            + "\n\n💰 Apenas "
-
-            + formatar_preco(
-
-                produto["preco_venda"]
-
-            )
-
-            + "\n\n🛒 Garanta aqui:\n"
-
-            + produto["link"]
-
-        )
-
-
-
-        link_zap = (
-
-            "https://wa.me/?text="
-
-            +
-
-            quote(mensagem)
-
-        )
-
-
-
-        pagina += f"""
-
-        <div style="
-        background:white;
-        padding:20px;
-        margin-bottom:20px;
-        border-radius:15px;
-        ">
-
-
-        <img src="{produto['imagem']}"
-        width="200">
-
-
-        <h2>
-
-        {produto['titulo']}
-
-        </h2>
-
-
-        <p>
-        💵 Compra:
-        {formatar_preco(produto['preco_compra'])}
-        </p>
-
-
-        <p>
-        🏷️ Venda:
-        {formatar_preco(produto['preco_venda'])}
-        </p>
-
-
-        <p>
-        💰 Lucro:
-        {formatar_preco(produto['lucro'])}
-        </p>
-
-
-        <p>
-        🔥 Vendidos:
-        {produto['vendidos']}
-        </p>
-
-
-        <a href="{link_zap}"
-        style="
-        background:#25D366;
-        color:white;
-        padding:12px;
-        border-radius:8px;
-        text-decoration:none;
-        ">
-
-        📲 Mandar para cliente
-
-        </a>
-
-
-        </div>
-
-        """
-
-
-
-    pagina += """
-
-    </body>
-
-    </html>
-
-    """
-
-
-
-    return pagina
-
-
-
-
-
-# ============================================================
-# MENU DE CATEGORIAS
-# ============================================================
-
-
-@app.route("/menu")
-def menu():
-
-
-    html_menu = """
-
-    <html>
-
     <body style="
     font-family:Arial;
-    padding:20px">
+    padding:20px;
+    ">
+
 
     <h1>
-    🛒 Escolha categoria
+    🧪 Diagnóstico Mercado Livre
     </h1>
 
-    """
-
-
-
-    for chave, valor in CATEGORIAS.items():
-
-
-        html_menu += f"""
-
-
-        <p>
-
-        <a href="/categoria?tipo={chave}">
-
-        {valor['nome']}
-
-        </a>
-
-        </p>
-
-
-        """
-
-
-
-    html_menu += """
 
     <p>
-
-    <a href="/categoria?tipo=todas">
-
-    🔥 Todos os produtos
-
-    </a>
-
+    Status:
+    <b>
+    {resposta.status_code if resposta else "ERRO"}
+    </b>
     </p>
 
 
+    <pre>
+
+    {escapar(texto)}
+
+    </pre>
+
+
+    <a href="/">
+    ← Voltar
+    </a>
+
+
     </body>
 
     </html>
 
     """
-
-
-
-    return html_menu
-
-
 
 
 
@@ -1251,38 +1226,62 @@ def logout():
 
 
 
-
-
 # ============================================================
-# TESTE
+# TESTE CONFIGURAÇÃO
 # ============================================================
 
 
-@app.route("/teste")
-def teste():
+@app.route("/teste-config")
+def teste_config():
 
 
-    return """
+    return f"""
 
     <h1>
-    ✅ Robô funcionando
+    🧪 Configuração
     </h1>
 
 
     <p>
-    Mercado Livre conectado.
+
+    CLIENT_ID:
+
+    <b>
+    {"OK" if CLIENT_ID else "FALTANDO"}
+    </b>
+
     </p>
 
 
-    <a href="/menu">
+    <p>
 
-    Ver produtos
+    CLIENT_SECRET:
 
+    <b>
+    {"OK" if CLIENT_SECRET else "FALTANDO"}
+    </b>
+
+    </p>
+
+
+
+    <p>
+
+    REDIRECT_URI:
+
+    <b>
+    {escapar(REDIRECT_URI)}
+    </b>
+
+    </p>
+
+
+
+    <a href="/">
+    Voltar
     </a>
 
     """
-
-
 
 
 
