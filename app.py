@@ -555,27 +555,12 @@ def buscar_produtos(
 ):
 
 
-    params = {
-
-
-        "site_id":
-        SITE_ID,
-
-
-        "q":
-        termo,
-
-
-        "limit":
-        30,
-
-
-        "sort":
-        "relevance"
-
-    }
-
-
+  params = {
+    "site_id": "MLB",
+    "q": termo,
+    "limit": 50,
+    "sort": "sold_quantity_desc"
+}
     if categoria in CATEGORIAS:
 
         params["category"] = (
