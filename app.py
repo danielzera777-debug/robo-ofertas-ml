@@ -384,7 +384,7 @@ def home():
 
     </a>
 
-    """def buscar_produtos(
+    def buscar_produtos(
         termo,
         categoria="todas"
 ):
