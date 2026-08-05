@@ -312,7 +312,7 @@ def callback():
 # ============================================================
 
 
-def buscar_produtos(categoria, limite=10):
+def def buscar_produtos(categoria, limite=10):
 
     url = "https://api.mercadolibre.com/sites/MLB/search"
 
@@ -324,10 +324,14 @@ def buscar_produtos(categoria, limite=10):
     resposta = requests.get(
         url,
         params=params,
-        headers=headers_api()
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "Robo-Ofertas-ML/1.0"
+        }
     )
 
-    print(resposta.text)
+    print("STATUS API:", resposta.status_code)
+    print("RESPOSTA API:", resposta.text[:500])
 
     if resposta.status_code != 200:
         return []
