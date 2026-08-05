@@ -7,7 +7,14 @@ import logging
 from urllib.parse import urlencode, quote
 
 import requests
-from flask import Flask, request, session, redirect, jsonify, render_template_string
+from flask import (
+    Flask,
+    request,
+    session,
+    redirect,
+    jsonify,
+    render_template_string,
+)
 
 
 app = Flask(__name__)
@@ -57,17 +64,14 @@ TOKEN_EXPIRES_AT = 0
 
 
 # ============================================================
-# NICHOS DO ROBÔ
+# NICHOS
 # ============================================================
 
 NICHOS = {
 
     "suplementos": {
-
         "nome": "🥤 Suplementos",
-
         "termos": [
-
             "whey protein",
             "whey",
             "creatina",
@@ -95,19 +99,13 @@ NICHOS = {
             "vitamina d",
             "vitamina c",
             "zinco",
-            "magnésio"
-
-        ]
-
+            "magnésio",
+        ],
     },
 
-
     "fitness_feminino": {
-
         "nome": "👩 Fitness Feminino",
-
         "termos": [
-
             "legging feminina academia",
             "top fitness feminino",
             "conjunto fitness feminino",
@@ -125,19 +123,13 @@ NICHOS = {
             "bermuda fitness feminina",
             "regata fitness feminina",
             "top academia feminino",
-            "body fitness feminino"
-
-        ]
-
+            "body fitness feminino",
+        ],
     },
 
-
     "fitness_masculino": {
-
         "nome": "👨 Fitness Masculino",
-
         "termos": [
-
             "camiseta dry fit masculina",
             "camiseta academia masculina",
             "regata academia masculina",
@@ -152,12 +144,9 @@ NICHOS = {
             "jaqueta fitness masculina",
             "regata fitness masculina",
             "short fitness masculino",
-            "bermuda academia masculina"
-
-        ]
-
-    }
-
+            "bermuda academia masculina",
+        ],
+    },
 }
 
 
@@ -166,27 +155,20 @@ NICHOS = {
 # ============================================================
 
 def num(valor, default=0.0):
-
     try:
         return float(valor)
-
     except (TypeError, ValueError):
-
         return default
 
 
 def integer(valor, default=20):
-
     try:
         return int(valor)
-
     except (TypeError, ValueError):
-
         return default
 
 
 def money(valor):
-
     return (
         f"R$ {num(valor):,.2f}"
         .replace(",", "X")
@@ -200,15 +182,12 @@ def money(valor):
 # ============================================================
 
 def token():
-
     global ACCESS_TOKEN
 
     if ACCESS_TOKEN:
         return ACCESS_TOKEN
 
-    ACCESS_TOKEN = session.get(
-        "access_token"
-    )
+    ACCESS_TOKEN = session.get("access_token")
 
     return ACCESS_TOKEN
 
@@ -218,14 +197,11 @@ def token():
 # ============================================================
 
 def save_tokens(data):
-
     global ACCESS_TOKEN
     global REFRESH_TOKEN
     global TOKEN_EXPIRES_AT
 
-    ACCESS_TOKEN = data.get(
-        "access_token"
-    )
+    ACCESS_TOKEN = data.get("access_token")
 
     REFRESH_TOKEN = (
         data.get("refresh_token")
@@ -234,7 +210,7 @@ def save_tokens(data):
 
     expires = integer(
         data.get("expires_in", 21600),
-        21600
+        21600,
     )
 
     TOKEN_EXPIRES_AT = (
@@ -243,20 +219,12 @@ def save_tokens(data):
     )
 
     if ACCESS_TOKEN:
-
-        session["access_token"] = (
-            ACCESS_TOKEN
-        )
+        session["access_token"] = ACCESS_TOKEN
 
     if REFRESH_TOKEN:
+        session["refresh_token"] = REFRESH_TOKEN
 
-        session["refresh_token"] = (
-            REFRESH_TOKEN
-        )
-
-    session["token_expires_at"] = (
-        TOKEN_EXPIRES_AT
-    )
+    session["token_expires_at"] = TOKEN_EXPIRES_AT
 
     session.modified = True
 
@@ -266,7 +234,6 @@ def save_tokens(data):
 # ============================================================
 
 def refresh_token():
-
     refresh = (
         REFRESH_TOKEN
         or session.get("refresh_token")
@@ -282,71 +249,41 @@ def refresh_token():
         return False
 
     try:
-
         response = requests.post(
-
             f"{API_BASE}/oauth/token",
-
             data={
-
-                "grant_type":
-                    "refresh_token",
-
-                "client_id":
-                    CLIENT_ID,
-
-                "client_secret":
-                    CLIENT_SECRET,
-
-                "refresh_token":
-                    refresh
-
+                "grant_type": "refresh_token",
+                "client_id": CLIENT_ID,
+                "client_secret": CLIENT_SECRET,
+                "refresh_token": refresh,
             },
-
-            timeout=25
-
+            timeout=25,
         )
 
     except requests.RequestException as error:
-
         logger.error(
             "Erro ao renovar token: %s",
-            error
+            error,
         )
-
         return False
-
 
     if response.status_code != 200:
-
         logger.warning(
-
             "Refresh recusado: HTTP %s - %s",
-
             response.status_code,
-
-            response.text[:500]
-
+            response.text[:500],
         )
-
         return False
 
-
     try:
-
-        save_tokens(
-            response.json()
-        )
-
+        save_tokens(response.json())
         return True
 
     except Exception as error:
-
         logger.error(
             "Erro salvando token renovado: %s",
-            error
+            error,
         )
-
         return False
 
 
@@ -355,22 +292,17 @@ def refresh_token():
 # ============================================================
 
 def valid_token():
-
     current = token()
 
     if not current:
         return None
 
-
     if (
         TOKEN_EXPIRES_AT
         and time.time() >= TOKEN_EXPIRES_AT
     ):
-
         if not refresh_token():
-
             return None
-
 
     return token()
 
@@ -380,31 +312,19 @@ def valid_token():
 # ============================================================
 
 def api_headers(auth=True):
-
     headers = {
-
-        "Accept":
-            "application/json",
-
-        "Content-Type":
-            "application/json",
-
-        "User-Agent":
-            "Robo-Ofertas-ML/8.0"
-
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "Robo-Ofertas-ML/8.0",
     }
 
-
     if auth:
-
         current = valid_token()
 
         if current:
-
             headers["Authorization"] = (
                 f"Bearer {current}"
             )
-
 
     return headers
 
@@ -416,20 +336,16 @@ def api_headers(auth=True):
 def oauth_login():
 
     if not CLIENT_ID:
-
         return (
             None,
-            "Configure ML_CLIENT_ID no Render."
+            "Configure ML_CLIENT_ID no Render.",
         )
-
 
     if not REDIRECT_URI:
-
         return (
             None,
-            "Configure ML_REDIRECT_URI no Render."
+            "Configure ML_REDIRECT_URI no Render.",
         )
-
 
     state = secrets.token_urlsafe(32)
 
@@ -440,41 +356,22 @@ def oauth_login():
     ).digest()
 
     challenge = (
-        base64.urlsafe_b64encode(
-            digest
-        )
+        base64.urlsafe_b64encode(digest)
         .decode()
         .rstrip("=")
     )
 
-
     session["oauth_state"] = state
-
     session["code_verifier"] = verifier
 
-
     params = {
-
-        "response_type":
-            "code",
-
-        "client_id":
-            CLIENT_ID,
-
-        "redirect_uri":
-            REDIRECT_URI,
-
-        "state":
-            state,
-
-        "code_challenge":
-            challenge,
-
-        "code_challenge_method":
-            "S256"
-
+        "response_type": "code",
+        "client_id": CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "state": state,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
     }
-
 
     return (
         AUTH_URL
@@ -489,13 +386,9 @@ def oauth_login():
 
 def classify(title, fallback=None):
 
-    text = (
-        title or ""
-    ).lower()
-
+    text = (title or "").lower()
 
     supplement_words = [
-
         "whey",
         "creatina",
         "pré treino",
@@ -517,13 +410,10 @@ def classify(title, fallback=None):
         "termogênico",
         "termogenico",
         "ômega 3",
-        "omega 3"
-
+        "omega 3",
     ]
 
-
     female_words = [
-
         "legging feminina",
         "top fitness",
         "conjunto fitness feminino",
@@ -535,13 +425,10 @@ def classify(title, fallback=None):
         "calça fitness feminina",
         "calca fitness feminina",
         "top academia feminino",
-        "bermuda fitness feminina"
-
+        "bermuda fitness feminina",
     ]
 
-
     male_words = [
-
         "camiseta masculina",
         "dry fit masculina",
         "regata masculina",
@@ -552,34 +439,26 @@ def classify(title, fallback=None):
         "conjunto fitness masculino",
         "compressão masculina",
         "compressao masculina",
-        "camiseta academia masculina"
-
+        "camiseta academia masculina",
     ]
-
 
     if any(
         word in text
         for word in supplement_words
     ):
-
         return "suplementos"
-
 
     if any(
         word in text
         for word in female_words
     ):
-
         return "fitness_feminino"
-
 
     if any(
         word in text
         for word in male_words
     ):
-
         return "fitness_masculino"
-
 
     return fallback
 
@@ -592,45 +471,29 @@ def whatsapp_text(
     title,
     price,
     link,
-    category
+    category,
 ):
 
     if category == "suplementos":
-
         head = "🥤 OFERTA DE SUPLEMENTO"
-
         icon = "💪"
 
-
     elif category == "fitness_feminino":
-
         head = "👩 OFERTA FITNESS FEMININA"
-
         icon = "👟"
 
-
     else:
-
         head = "👨 OFERTA FITNESS MASCULINA"
-
         icon = "🏋️"
 
-
     return (
-
         f"🔥 {head} 🔥\n\n"
-
         f"{icon} {title}\n\n"
-
-        f"💰 Por apenas: "
-        f"{money(price)}\n\n"
-
+        f"💰 Por apenas: {money(price)}\n\n"
         f"🛒 COMPRAR AGORA 👇\n"
         f"{link}\n\n"
-
         "⚠️ Preço e disponibilidade "
         "podem mudar no Mercado Livre."
-
     )
 
 
@@ -641,121 +504,79 @@ def whatsapp_text(
 def transform(item, fallback=None):
 
     if not isinstance(item, dict):
-
         return None
 
-
     title = str(
-        item.get("title")
-        or ""
+        item.get("title") or ""
     ).strip()
-
 
     price = num(
         item.get("price")
     )
-
 
     link = (
         item.get("permalink")
         or ""
     )
 
-
     if not title:
-
         return None
-
 
     if price <= 0:
-
         return None
-
 
     category = classify(
         title,
-        fallback
+        fallback,
     )
 
-
     if not category:
-
         return None
-
 
     shipping = (
         item.get("shipping")
         or {}
     )
 
-
     seller = (
         item.get("seller")
         or {}
     )
 
-
     return {
-
-        "id":
-            item.get("id"),
-
-        "titulo":
-            title,
-
-        "preco":
-            price,
-
-        "preco_formatado":
-            money(price),
-
-        "imagem":
+        "id": item.get("id"),
+        "titulo": title,
+        "preco": price,
+        "preco_formatado": money(price),
+        "imagem": (
             item.get("thumbnail")
-            or "",
-
-        "link":
+            or ""
+        ),
+        "link": link,
+        "categoria": category,
+        "vendidos": integer(
+            item.get("sold_quantity"),
+            0,
+        ),
+        "condicao": (
+            item.get("condition")
+            or ""
+        ),
+        "frete_gratis": bool(
+            shipping.get("free_shipping")
+        ),
+        "vendedor_id": seller.get("id"),
+        "whatsapp": whatsapp_text(
+            title,
+            price,
             link,
-
-        "categoria":
             category,
-
-        "vendidos":
-            integer(
-                item.get(
-                    "sold_quantity"
-                ),
-                0
-            ),
-
-        "condicao":
-            item.get(
-                "condition"
-            )
-            or "",
-
-        "frete_gratis":
-            bool(
-                shipping.get(
-                    "free_shipping"
-                )
-            ),
-
-        "vendedor_id":
-            seller.get("id"),
-
-        "whatsapp":
-            whatsapp_text(
-                title,
-                price,
-                link,
-                category
-            )
-
+        ),
     }
 
 
 # ============================================================
-# BUSCA MERCADO LIVRE - CORRIGIDA
+# BUSCA MERCADO LIVRE
 # ============================================================
 
 def search_ml(term, limit=20):
@@ -764,309 +585,193 @@ def search_ml(term, limit=20):
         term or ""
     ).strip()
 
-
     if not term:
-
         return [], {
-
             "status": 400,
-
-            "mensagem":
-                "Termo de busca vazio.",
-
-            "resposta":
-                ""
-
+            "mensagem": "Termo de busca vazio.",
+            "resposta": "",
         }
-
 
     limit = max(
         1,
         min(
             integer(limit, 20),
-            50
-        )
+            50,
+        ),
     )
-
 
     url = (
         f"{API_BASE}/sites/"
         f"{SITE_ID}/search"
     )
 
-
     params = {
-
-        "q":
-            term,
-
-        "limit":
-            limit,
-
-        "offset":
-            0
-
+        "q": term,
+        "limit": limit,
+        "offset": 0,
     }
-
-
-    # ========================================================
-    # PRIMEIRA TENTATIVA AUTENTICADA
-    # ========================================================
 
     try:
 
         response = requests.get(
-
             url,
-
             params=params,
-
             headers=api_headers(True),
-
-            timeout=25
-
+            timeout=25,
         )
 
     except requests.RequestException as error:
 
         logger.warning(
-
             "Busca '%s' falhou: %s",
-
             term,
-
-            error
-
+            error,
         )
 
         return [], {
-
             "status": 502,
-
-            "mensagem":
+            "mensagem": (
                 "Não foi possível conectar "
-                "ao Mercado Livre.",
-
-            "resposta":
-                str(error)
-
+                "ao Mercado Livre."
+            ),
+            "resposta": str(error),
         }
-
-
-    # ========================================================
-    # SUCESSO
-    # ========================================================
 
     if response.status_code == 200:
 
         try:
-
             data = response.json()
 
         except ValueError:
 
             return [], {
-
                 "status": 502,
-
-                "mensagem":
+                "mensagem": (
                     "Mercado Livre retornou "
-                    "uma resposta inválida.",
-
-                "resposta":
-                    response.text[:1000]
-
+                    "uma resposta inválida."
+                ),
+                "resposta": response.text[:1000],
             }
-
 
         results = data.get(
             "results",
-            []
+            [],
         )
-
 
         if not isinstance(
             results,
-            list
+            list,
         ):
-
             results = []
 
-
         return results, None
-
-
-    # ========================================================
-    # TOKEN EXPIRADO
-    # ========================================================
 
     if response.status_code == 401:
 
         logger.warning(
-
             "Token recusado na busca '%s'. "
             "Tentando renovar.",
-
-            term
-
+            term,
         )
-
 
         if refresh_token():
 
             try:
 
                 retry = requests.get(
-
                     url,
-
                     params=params,
-
                     headers=api_headers(True),
-
-                    timeout=25
-
+                    timeout=25,
                 )
 
             except requests.RequestException as error:
 
                 return [], {
-
                     "status": 502,
-
-                    "mensagem":
+                    "mensagem": (
                         "Falha de conexão "
-                        "após renovar o token.",
-
-                    "resposta":
-                        str(error)
-
+                        "após renovar o token."
+                    ),
+                    "resposta": str(error),
                 }
-
 
             if retry.status_code == 200:
 
                 try:
-
                     data = retry.json()
 
                 except ValueError:
 
                     return [], {
-
                         "status": 502,
-
-                        "mensagem":
+                        "mensagem": (
                             "Resposta inválida "
-                            "após renovar o token.",
-
-                        "resposta":
-                            retry.text[:1000]
-
+                            "após renovar o token."
+                        ),
+                        "resposta": retry.text[:1000],
                     }
-
 
                 results = data.get(
                     "results",
-                    []
+                    [],
                 )
-
 
                 if not isinstance(
                     results,
-                    list
+                    list,
                 ):
-
                     results = []
-
 
                 return results, None
 
-
             response = retry
 
-
         return [], {
-
             "status": 401,
-
-            "mensagem":
+            "mensagem": (
                 "O token do Mercado Livre "
                 "foi recusado. "
-                "Conecte novamente.",
-
-            "resposta":
-                response.text[:1000]
-
+                "Conecte novamente."
+            ),
+            "resposta": response.text[:1000],
         }
-
-
-    # ========================================================
-    # 403 - NÃO TRANSFORMAR EM []
-    # ========================================================
 
     if response.status_code == 403:
 
         logger.warning(
-
             "Mercado Livre recusou "
             "a busca '%s': HTTP 403: %s",
-
             term,
-
-            response.text[:1000]
-
+            response.text[:1000],
         )
 
-
         return [], {
-
             "status": 403,
-
-            "mensagem":
+            "mensagem": (
                 "O Mercado Livre recusou "
                 "a consulta de busca (HTTP 403). "
                 "O login está válido, mas a "
                 "aplicação/token não tem "
-                "autorização para este endpoint.",
-
-            "resposta":
-                response.text[:1000]
-
+                "autorização para este endpoint."
+            ),
+            "resposta": response.text[:1000],
         }
 
-
-    # ========================================================
-    # OUTROS ERROS
-    # ========================================================
-
     logger.warning(
-
         "Busca '%s' falhou: HTTP %s: %s",
-
         term,
-
         response.status_code,
-
-        response.text[:1000]
-
+        response.text[:1000],
     )
 
-
     return [], {
-
-        "status":
-            response.status_code,
-
-        "mensagem":
-            (
-                "Mercado Livre retornou "
-                f"HTTP {response.status_code}."
-            ),
-
-        "resposta":
-            response.text[:1000]
-
+        "status": response.status_code,
+        "mensagem": (
+            "Mercado Livre retornou "
+            f"HTTP {response.status_code}."
+        ),
+        "resposta": response.text[:1000],
     }
 
 
@@ -1077,56 +782,61 @@ def search_ml(term, limit=20):
 def search_term(
     term,
     category=None,
-    limit=20
+    limit=20,
 ):
 
     results, error = search_ml(
         term,
-        limit
+        limit,
     )
 
-
     if error:
-
         return [], error
 
-
     products = []
-
     seen = set()
-
 
     for item in results:
 
         product = transform(
             item,
-            category
+            category,
         )
-
 
         if not product:
-
             continue
 
-
-        product_id = product.get(
-            "id"
-        )
-
+        product_id = product.get("id")
 
         if product_id in seen:
-
             continue
-
 
         seen.add(product_id)
 
-        products.append(
-            product
-        )
-
+        products.append(product)
 
     return products, None
+
+
+# ============================================================
+# ORDENAÇÃO
+# ============================================================
+
+def sort_products(products):
+
+    return sorted(
+        products,
+        key=lambda item: (
+            integer(
+                item.get("vendidos"),
+                0,
+            ),
+            -num(
+                item.get("preco")
+            ),
+        ),
+        reverse=True,
+    )
 
 
 # ============================================================
@@ -1135,134 +845,77 @@ def search_term(
 
 def search_category(
     category,
-    limit=30
+    limit=30,
 ):
 
     if category not in NICHOS:
 
         return [], {
-
             "status": 400,
-
-            "mensagem":
-                "Categoria não encontrada.",
-
-            "resposta":
-                ""
-
+            "mensagem": "Categoria não encontrada.",
+            "resposta": "",
         }
 
-
     limit = max(
-
         1,
-
         min(
             integer(limit, 30),
-            100
-        )
-
+            100,
+        ),
     )
-
 
     products = []
-
     seen = set()
 
-
     per_term = min(
-
         20,
-
-        max(
-            5,
-            limit
-        )
-
+        max(5, limit),
     )
-
 
     first_error = None
 
-
-    for term in NICHOS[
-        category
-    ]["termos"]:
-
+    for term in NICHOS[category]["termos"]:
 
         results, error = search_term(
-
             term,
-
             category,
-
-            per_term
-
+            per_term,
         )
-
 
         if error:
 
             if first_error is None:
-
                 first_error = error
 
-
-            # 401/403 não devem ser
-            # escondidos como ausência
-            # de produtos.
-
-            if error.get(
-                "status"
-            ) in (401, 403):
-
+            if error.get("status") in (401, 403):
                 return [], error
-
 
             continue
 
-
         for product in results:
 
-            product_id = product.get(
-                "id"
-            )
-
+            product_id = product.get("id")
 
             if product_id in seen:
-
                 continue
 
+            seen.add(product_id)
 
-            seen.add(
-                product_id
-            )
-
-
-            products.append(
-                product
-            )
-
+            products.append(product)
 
             if len(products) >= limit:
 
                 return (
-                    sort_products(
-                        products
-                    ),
-                    None
+                    sort_products(products),
+                    None,
                 )
-
 
     if products:
 
         return (
-            sort_products(
-                products
-            ),
-            None
+            sort_products(products),
+            None,
         )
-
 
     return [], first_error
 
@@ -1274,104 +927,414 @@ def search_category(
 def search_all(limit=30):
 
     limit = max(
-
         1,
-
         min(
             integer(limit, 30),
-            100
-        )
-
+            100,
+        ),
     )
-
 
     products = []
-
     seen = set()
 
-
     each = max(
-
         5,
-
-        limit // 3
-
+        limit // 3,
     )
 
-
     first_error = None
-
 
     for category in NICHOS:
 
         results, error = search_category(
-
             category,
-
-            each
-
+            each,
         )
-
 
         if error:
 
             if first_error is None:
-
                 first_error = error
 
-
-            if error.get(
-                "status"
-            ) in (401, 403):
-
+            if error.get("status") in (401, 403):
                 return [], error
-
 
         for product in results:
 
-            product_id = product.get(
-                "id"
-            )
-
+            product_id = product.get("id")
 
             if product_id in seen:
-
                 continue
 
+            seen.add(product_id)
 
-            seen.add(
-                product_id
-            )
-
-
-            products.append(
-                product
-            )
-
+            products.append(product)
 
             if len(products) >= limit:
 
                 return (
-                    sort_products(
-                        products
-                    ),
-                    None
+                    sort_products(products),
+                    None,
                 )
-
 
     if products:
 
         return (
-            sort_products(
-                products
-            ),
-            None
+            sort_products(products),
+            None,
         )
-
 
     return [], first_error
 
 
+# ============================================================
+# HOME
+# ============================================================
+
+@app.route("/")
+def home():
+
+    connected = bool(
+        valid_token()
+    )
+
+    return render_template_string(
+        INDEX_HTML,
+        connected=connected,
+        version=VERSION,
+        niches=NICHOS,
+    )
+
+
+# ============================================================
+# LOGIN
+# ============================================================
+
+@app.route("/login")
+def login():
+
+    url, error = oauth_login()
+
+    if error:
+        return error, 500
+
+    return redirect(url)
+
+
+# ============================================================
+# CALLBACK
+# ============================================================
+
+@app.route("/callback")
+def callback():
+
+    if request.args.get("error"):
+
+        return (
+            "<h2>Erro no Mercado Livre</h2>"
+            "<p>"
+            + request.args.get(
+                "error_description",
+                request.args.get("error"),
+            )
+            + "</p>",
+            400,
+        )
+
+    code = request.args.get("code")
+    state = request.args.get("state")
+
+    if not code:
+        return (
+            "Código OAuth não recebido.",
+            400,
+        )
+
+    if state != session.get("oauth_state"):
+
+        return (
+            "Sessão OAuth inválida "
+            "ou expirada. "
+            "Tente conectar novamente.",
+            400,
+        )
+
+    verifier = session.get("code_verifier")
+
+    if not verifier:
+
+        return (
+            "code_verifier não encontrado. "
+            "Tente conectar novamente.",
+            400,
+        )
+
+    if not CLIENT_ID:
+        return "ML_CLIENT_ID não configurado.", 500
+
+    if not CLIENT_SECRET:
+        return "ML_CLIENT_SECRET não configurado.", 500
+
+    if not REDIRECT_URI:
+        return "ML_REDIRECT_URI não configurado.", 500
+
+    try:
+
+        response = requests.post(
+            f"{API_BASE}/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": CLIENT_ID,
+                "client_secret": CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": REDIRECT_URI,
+                "code_verifier": verifier,
+            },
+            timeout=25,
+        )
+
+    except requests.RequestException as error:
+
+        return (
+            f"Erro de conexão "
+            f"com Mercado Livre: {error}",
+            502,
+        )
+
+    if response.status_code != 200:
+
+        return (
+            "<h2>Mercado Livre "
+            "recusou o login</h2>"
+            "<pre>"
+            + response.text[:2000]
+            + "</pre>",
+            400,
+        )
+
+    try:
+
+        save_tokens(
+            response.json()
+        )
+
+    except Exception as error:
+
+        return (
+            f"Erro salvando token: {error}",
+            500,
+        )
+
+    session.pop(
+        "oauth_state",
+        None,
+    )
+
+    session.pop(
+        "code_verifier",
+        None,
+    )
+
+    return redirect("/")
+
+
+# ============================================================
+# LOGOUT
+# ============================================================
+
+@app.route("/logout")
+def logout():
+
+    global ACCESS_TOKEN
+    global REFRESH_TOKEN
+    global TOKEN_EXPIRES_AT
+
+    ACCESS_TOKEN = None
+    REFRESH_TOKEN = None
+    TOKEN_EXPIRES_AT = 0
+
+    session.clear()
+
+    return redirect("/")
+
+
+# ============================================================
+# HEALTH
+# ============================================================
+
+@app.route("/health")
+def health():
+
+    return jsonify(
+        ok=True,
+        app="Robo de Ofertas",
+        versao=VERSION,
+    )
+
+
+# ============================================================
+# DIAGNÓSTICO
+# ============================================================
+
+@app.route("/diagnostico")
+def diagnostico():
+
+    return jsonify(
+        ok=True,
+        app="Robo de Ofertas",
+        versao=VERSION,
+        mercado_livre=bool(
+            valid_token()
+        ),
+        ml_client_id=bool(
+            CLIENT_ID
+        ),
+        ml_client_secret=bool(
+            CLIENT_SECRET
+        ),
+        ml_redirect_uri=bool(
+            REDIRECT_URI
+        ),
+        categorias=list(
+            NICHOS.keys()
+        ),
+    )
+
+
+# ============================================================
+# STATUS
+# ============================================================
+
+@app.route("/api/status")
+def status():
+
+    return jsonify(
+        ok=True,
+        app="Robo de Ofertas",
+        versao=VERSION,
+        mercado_livre=bool(
+            valid_token()
+        ),
+        categorias=list(
+            NICHOS.keys()
+        ),
+    )
+
+
+# ============================================================
+# BUSCAR
+# ============================================================
+
+@app.route("/api/buscar")
+def api_buscar():
+
+    term = request.args.get(
+        "q",
+        "",
+    ).strip()
+
+    category = request.args.get(
+        "categoria",
+        "todos",
+    ).strip().lower()
+
+    limit = integer(
+        request.args.get(
+            "limite",
+            30,
+        ),
+        30,
+    )
+
+    if not term:
+
+        return jsonify(
+            ok=False,
+            mensagem=(
+                "Informe o produto "
+                "para buscar."
+            ),
+            produtos=[],
+        ), 400
+
+    if (
+        category not in (
+            "todos",
+            "todas",
+            "",
+        )
+        and
+        category not in NICHOS
+    ):
+
+        return jsonify(
+            ok=False,
+            mensagem="Categoria inválida.",
+            produtos=[],
+        ), 400
+
+    products, error = search_term(
+        term,
+        None
+        if category in (
+            "todos",
+            "todas",
+            "",
+        )
+        else category,
+        limit,
+    )
+
+    # ========================================================
+    # ERRO NÃO É "NENHUM PRODUTO"
+    # ========================================================
+
+    if error:
+
+        status_code = integer(
+            error.get("status"),
+            502,
+        )
+
+        if (
+            status_code < 400
+            or status_code > 599
+        ):
+            status_code = 502
+
+        return jsonify(
+            ok=False,
+            quantidade=0,
+            produtos=[],
+
+            # CORREÇÃO PRINCIPAL:
+            # antes estava "mensagem:"
+            # agora está "mensagem="
+
+            mensagem=error.get(
+                "mensagem",
+                "Erro ao consultar "
+                "o Mercado Livre.",
+            ),
+
+            status_mercado_livre=status_code,
+
+            detalhes=error.get(
+                "resposta",
+                "",
+            ),
+        ), status_code
+
+    return jsonify(
+        ok=True,
+        quantidade=len(products),
+        produtos=products,
+    )
+
+
+# ============================================================
+# FIM DA PARTE 1
+# ============================================================
 # ============================================================
 # ORDENAÇÃO
 # ============================================================
@@ -1385,16 +1348,12 @@ def sort_products(products):
         key=lambda item: (
 
             integer(
-                item.get(
-                    "vendidos"
-                ),
+                item.get("vendidos"),
                 0
             ),
 
             -num(
-                item.get(
-                    "preco"
-                )
+                item.get("preco")
             )
 
         ),
@@ -1414,7 +1373,6 @@ def home():
     connected = bool(
         valid_token()
     )
-
 
     return render_template_string(
 
@@ -1438,39 +1396,32 @@ def login():
 
     url, error = oauth_login()
 
-
     if error:
 
         return error, 500
-
 
     return redirect(url)
 
 
 # ============================================================
-# CALLBACK
+# CALLBACK OAUTH
 # ============================================================
 
 @app.route("/callback")
 def callback():
 
-    if request.args.get(
-        "error"
-    ):
+    if request.args.get("error"):
+
+        error_description = request.args.get(
+            "error_description",
+            request.args.get("error")
+        )
 
         return (
 
             "<h2>Erro no Mercado Livre</h2>"
-
             "<p>"
-
-            + request.args.get(
-                "error_description",
-                request.args.get(
-                    "error"
-                )
-            )
-
+            + str(error_description)
             + "</p>",
 
             400
@@ -1478,13 +1429,9 @@ def callback():
         )
 
 
-    code = request.args.get(
-        "code"
-    )
+    code = request.args.get("code")
 
-    state = request.args.get(
-        "state"
-    )
+    state = request.args.get("state")
 
 
     if not code:
@@ -1495,9 +1442,7 @@ def callback():
         )
 
 
-    if state != session.get(
-        "oauth_state"
-    ):
+    if state != session.get("oauth_state"):
 
         return (
 
@@ -1585,6 +1530,10 @@ def callback():
 
     except requests.RequestException as error:
 
+        logger.exception(
+            "Erro na conexão OAuth"
+        )
+
         return (
 
             f"Erro de conexão "
@@ -1597,10 +1546,20 @@ def callback():
 
     if response.status_code != 200:
 
+        logger.warning(
+
+            "OAuth recusado: HTTP %s - %s",
+
+            response.status_code,
+
+            response.text[:1000]
+
+        )
+
         return (
 
-            "<h2>Mercado Livre "
-            "recusou o login</h2>"
+            "<h2>Mercado Livre recusou "
+            "o login</h2>"
 
             "<pre>"
 
@@ -1615,11 +1574,29 @@ def callback():
 
     try:
 
-        save_tokens(
-            response.json()
+        data = response.json()
+
+    except ValueError:
+
+        return (
+
+            "Mercado Livre retornou "
+            "uma resposta inválida.",
+
+            502
+
         )
 
+
+    try:
+
+        save_tokens(data)
+
     except Exception as error:
+
+        logger.exception(
+            "Erro salvando tokens"
+        )
 
         return (
             f"Erro salvando token: {error}",
@@ -1691,6 +1668,11 @@ def health():
 @app.route("/diagnostico")
 def diagnostico():
 
+    connected = bool(
+        valid_token()
+    )
+
+
     return jsonify(
 
         ok=True,
@@ -1699,9 +1681,7 @@ def diagnostico():
 
         versao=VERSION,
 
-        mercado_livre=bool(
-            valid_token()
-        ),
+        mercado_livre=connected,
 
         ml_client_id=bool(
             CLIENT_ID
@@ -1729,6 +1709,11 @@ def diagnostico():
 @app.route("/api/status")
 def status():
 
+    connected = bool(
+        valid_token()
+    )
+
+
     return jsonify(
 
         ok=True,
@@ -1737,9 +1722,7 @@ def status():
 
         versao=VERSION,
 
-        mercado_livre=bool(
-            valid_token()
-        ),
+        mercado_livre=connected,
 
         categorias=list(
             NICHOS.keys()
@@ -1749,7 +1732,7 @@ def status():
 
 
 # ============================================================
-# BUSCAR
+# BUSCAR PRODUTO
 # ============================================================
 
 @app.route("/api/buscar")
@@ -1785,9 +1768,10 @@ def api_buscar():
 
             ok=False,
 
-            mensagem:
+            mensagem=(
                 "Informe o produto "
-                "para buscar.",
+                "para buscar."
+            ),
 
             produtos=[]
 
@@ -1812,17 +1796,16 @@ def api_buscar():
 
             ok=False,
 
-            mensagem:
-                "Categoria inválida.",
+            mensagem=(
+                "Categoria inválida."
+            ),
 
             produtos=[]
 
         ), 400
 
 
-    products, error = search_term(
-
-        term,
+    selected_category = (
 
         None
 
@@ -1832,7 +1815,16 @@ def api_buscar():
             ""
         )
 
-        else category,
+        else category
+
+    )
+
+
+    products, error = search_term(
+
+        term,
+
+        selected_category,
 
         limit
 
@@ -1840,8 +1832,7 @@ def api_buscar():
 
 
     # ========================================================
-    # IMPORTANTE:
-    # ERRO NÃO É "NENHUM PRODUTO"
+    # ERRO REAL DA API
     # ========================================================
 
     if error:
@@ -1907,62 +1898,124 @@ def api_buscar():
         produtos=products
 
     )
-    # ============================================================
+
+
+# ============================================================
 # OFERTAS POR CATEGORIA
 # ============================================================
 
 @app.route("/ofertas/<category>")
 def offers(category):
 
-    category = category.lower().strip()
+    category = (
+        category
+        .lower()
+        .strip()
+    )
+
 
     if category not in NICHOS:
 
         return jsonify(
+
             ok=False,
-            mensagem="Categoria não encontrada.",
+
+            mensagem=(
+                "Categoria não encontrada."
+            ),
+
             produtos=[]
+
         ), 404
 
+
     limit = integer(
-        request.args.get("limite", 30),
+
+        request.args.get(
+            "limite",
+            30
+        ),
+
         30
+
     )
 
+
     products, error = search_category(
+
         category,
+
         limit
+
     )
+
 
     if error:
 
         status_code = integer(
-            error.get("status"),
+
+            error.get(
+                "status"
+            ),
+
             502
+
         )
 
-        if status_code < 400 or status_code > 599:
+
+        if (
+            status_code < 400
+            or status_code > 599
+        ):
+
             status_code = 502
 
+
         return jsonify(
+
             ok=False,
+
             quantidade=0,
+
             produtos=[],
+
             categoria=category,
+
             mensagem=error.get(
+
                 "mensagem",
-                "Erro ao consultar o Mercado Livre."
+
+                "Erro ao consultar "
+                "o Mercado Livre."
+
             ),
-            status_mercado_livre=status_code,
-            detalhes=error.get("resposta", "")
+
+            status_mercado_livre=
+                status_code,
+
+            detalhes=error.get(
+                "resposta",
+                ""
+            )
+
         ), status_code
 
+
     return jsonify(
+
         ok=True,
+
         categoria=category,
-        nome_categoria=NICHOS[category]["nome"],
-        quantidade=len(products),
+
+        nome_categoria=
+            NICHOS[category]["nome"],
+
+        quantidade=len(
+            products
+        ),
+
         produtos=products
+
     )
 
 
@@ -1974,62 +2027,126 @@ def offers(category):
 def melhores():
 
     category = request.args.get(
+
         "categoria",
+
         "todos"
+
     ).lower().strip()
 
+
     limit = integer(
-        request.args.get("limite", 30),
+
+        request.args.get(
+            "limite",
+            30
+        ),
+
         30
+
     )
 
-    if category in ("todos", "todas", ""):
 
-        products, error = search_all(limit)
+    if category in (
+        "todos",
+        "todas",
+        ""
+    ):
+
+        products, error = search_all(
+            limit
+        )
+
 
     elif category in NICHOS:
 
         products, error = search_category(
+
             category,
+
             limit
+
         )
+
 
     else:
 
         return jsonify(
+
             ok=False,
-            mensagem="Categoria inválida.",
+
+            mensagem=(
+                "Categoria inválida."
+            ),
+
             produtos=[]
+
         ), 400
+
 
     if error:
 
         status_code = integer(
-            error.get("status"),
+
+            error.get(
+                "status"
+            ),
+
             502
+
         )
 
-        if status_code < 400 or status_code > 599:
+
+        if (
+            status_code < 400
+            or status_code > 599
+        ):
+
             status_code = 502
 
+
         return jsonify(
+
             ok=False,
+
             quantidade=0,
+
             produtos=[],
+
             categoria=category,
+
             mensagem=error.get(
+
                 "mensagem",
-                "Erro ao consultar o Mercado Livre."
+
+                "Erro ao consultar "
+                "o Mercado Livre."
+
             ),
-            status_mercado_livre=status_code,
-            detalhes=error.get("resposta", "")
+
+            status_mercado_livre=
+                status_code,
+
+            detalhes=error.get(
+                "resposta",
+                ""
+            )
+
         ), status_code
 
+
     return jsonify(
+
         ok=True,
+
         categoria=category,
-        quantidade=len(products),
+
+        quantidade=len(
+            products
+        ),
+
         produtos=products
+
     )
 
 
@@ -2041,45 +2158,80 @@ def melhores():
 def whatsapp_api():
 
     title = request.args.get(
+
         "titulo",
+
         "Oferta Fitness"
+
     )
+
 
     price = num(
-        request.args.get("preco")
+
+        request.args.get(
+            "preco"
+        )
+
     )
+
 
     link = request.args.get(
+
         "link",
+
         ""
+
     )
 
+
     category = request.args.get(
+
         "categoria",
+
         "suplementos"
+
     )
+
 
     if not link:
 
         return jsonify(
+
             ok=False,
-            mensagem="Link não informado."
+
+            mensagem=(
+                "Link não informado."
+            )
+
         ), 400
 
+
     text = whatsapp_text(
+
         title,
+
         price,
+
         link,
+
         category
+
     )
 
+
     return jsonify(
+
         ok=True,
+
         mensagem=text,
+
         whatsapp_url=(
+
             "https://wa.me/?text="
             + quote(text)
+
         )
+
     )
 
 
@@ -2092,13 +2244,22 @@ def me():
 
     current = valid_token()
 
+
     if not current:
 
         return jsonify(
+
             ok=False,
+
             mercado_livre=False,
-            mensagem="Mercado Livre não conectado."
+
+            mensagem=(
+                "Mercado Livre "
+                "não conectado."
+            )
+
         ), 401
+
 
     try:
 
@@ -2114,10 +2275,18 @@ def me():
 
     except requests.RequestException as error:
 
+        logger.exception(
+            "Erro consultando usuário ML"
+        )
+
         return jsonify(
+
             ok=False,
+
             mensagem=str(error)
+
         ), 502
+
 
     if response.status_code == 401:
 
@@ -2138,20 +2307,32 @@ def me():
             except requests.RequestException as error:
 
                 return jsonify(
+
                     ok=False,
+
                     mensagem=str(error)
+
                 ), 502
 
         else:
 
             return jsonify(
+
                 ok=False,
+
                 mercado_livre=False,
+
                 mensagem=(
+
                     "Token expirado. "
-                    "Conecte o Mercado Livre novamente."
+
+                    "Conecte o Mercado Livre "
+                    "novamente."
+
                 )
+
             ), 401
+
 
     if response.status_code != 200:
 
@@ -2164,13 +2345,16 @@ def me():
             status=response.status_code,
 
             mensagem=(
+
                 "Mercado Livre recusou "
                 "a consulta."
+
             ),
 
             resposta=response.text[:2000]
 
         ), response.status_code
+
 
     try:
 
@@ -2180,40 +2364,65 @@ def me():
 
         data = {}
 
+
     return jsonify(
+
         ok=True,
+
         mercado_livre=True,
+
         dados=data
+
     )
 
 
 # ============================================================
-# ROTA PARA TESTAR BUSCA
+# TESTE DE BUSCA
 # ============================================================
 
 @app.route("/api/teste-busca")
 def teste_busca():
 
     term = request.args.get(
+
         "q",
+
         "whey protein"
+
     ).strip()
 
+
     products, error = search_term(
+
         term,
+
         "suplementos",
+
         10
+
     )
+
 
     if error:
 
         status_code = integer(
-            error.get("status"),
+
+            error.get(
+                "status"
+            ),
+
             502
+
         )
 
-        if status_code < 400 or status_code > 599:
+
+        if (
+            status_code < 400
+            or status_code > 599
+        ):
+
             status_code = 502
+
 
         return jsonify(
 
@@ -2226,18 +2435,26 @@ def teste_busca():
             produtos=[],
 
             mensagem=error.get(
+
                 "mensagem",
+
                 "Erro na busca."
+
             ),
 
-            status_mercado_livre=status_code,
+            status_mercado_livre=
+                status_code,
 
             detalhes=error.get(
+
                 "resposta",
+
                 ""
+
             )
 
         ), status_code
+
 
     return jsonify(
 
@@ -2247,7 +2464,9 @@ def teste_busca():
 
         termo=term,
 
-        quantidade=len(products),
+        quantidade=len(
+            products
+        ),
 
         produtos=products
 
@@ -2262,19 +2481,36 @@ def teste_busca():
 def not_found(error):
 
     if (
+
         request.path.startswith("/api/")
-        or request.path.startswith("/ofertas/")
+
+        or
+
+        request.path.startswith(
+            "/ofertas/"
+        )
+
     ):
 
         return jsonify(
+
             ok=False,
-            mensagem="Rota não encontrada.",
+
+            mensagem=(
+                "Rota não encontrada."
+            ),
+
             rota=request.path
+
         ), 404
 
+
     return (
+
         "<h2>Rota não encontrada</h2>"
+
         "<a href='/'>Voltar</a>"
+
     ), 404
 
 
@@ -2289,9 +2525,17 @@ def server_error(error):
         "Erro interno"
     )
 
+
     if (
+
         request.path.startswith("/api/")
-        or request.path.startswith("/ofertas/")
+
+        or
+
+        request.path.startswith(
+            "/ofertas/"
+        )
+
     ):
 
         return jsonify(
@@ -2299,16 +2543,21 @@ def server_error(error):
             ok=False,
 
             mensagem=(
-                "Erro interno do servidor."
+                "Erro interno "
+                "do servidor."
             ),
 
             erro=str(error)
 
         ), 500
 
+
     return (
+
         "<h2>Erro interno</h2>"
+
         "<a href='/'>Voltar</a>"
+
     ), 500
 
 
@@ -2642,7 +2891,6 @@ select {
 
 <body>
 
-
 <header>
 
 <h1>
@@ -2655,9 +2903,7 @@ Suplementos • Fitness Feminino • Fitness Masculino
 
 </header>
 
-
 <main>
-
 
 <div class="card">
 
@@ -2711,7 +2957,6 @@ Mercado Livre não conectado
 
 </div>
 
-
 <div class="card">
 
 <h2>
@@ -2754,7 +2999,6 @@ Buscar
 
 </div>
 
-
 <div class="card">
 
 <h2>
@@ -2791,23 +3035,18 @@ Buscar
 
 </div>
 
-
 <div id="loading">
 🔎 Procurando ofertas...
 </div>
-
 
 <div
     id="results"
     class="grid"
 ></div>
 
-
 </main>
 
-
 <script>
-
 
 function esc(value) {
 
@@ -2847,20 +3086,6 @@ function categoria(category) {
         .value = category;
 
 
-    if (
-        category === "todos"
-    ) {
-
-        document
-            .getElementById("query")
-            .value = "whey";
-
-        buscar();
-
-        return;
-    }
-
-
     let query;
 
 
@@ -2868,11 +3093,9 @@ function categoria(category) {
         category === "suplementos"
     ) {
 
-        query =
-            "whey protein";
+        query = "whey protein";
 
     }
-
 
     else if (
         category === "fitness_feminino"
@@ -2883,11 +3106,18 @@ function categoria(category) {
 
     }
 
-
-    else {
+    else if (
+        category === "fitness_masculino"
+    ) {
 
         query =
             "camiseta dry fit masculina";
+
+    }
+
+    else {
+
+        query = "whey protein";
 
     }
 
@@ -2958,7 +3188,6 @@ async function buscar() {
 
     try {
 
-
         const response =
             await fetch(
 
@@ -2996,11 +3225,6 @@ async function buscar() {
 
         }
 
-
-        /*
-         * IMPORTANTE:
-         * Agora 403 aparece como erro real.
-         */
 
         if (
             response.status === 401
@@ -3081,10 +3305,11 @@ async function buscar() {
             data.produtos
         );
 
-
     }
 
     catch (error) {
+
+        console.error(error);
 
         status.innerHTML =
 
@@ -3194,6 +3419,7 @@ ${shipping}
 <a
     class="btn whats"
     target="_blank"
+    rel="noopener noreferrer"
     href="${whatsappUrl}"
 >
 
@@ -3204,6 +3430,7 @@ ${shipping}
 <a
     class="btn product-link"
     target="_blank"
+    rel="noopener noreferrer"
     href="${esc(product.link)}"
 >
 
@@ -3223,9 +3450,7 @@ ${shipping}
 
 }
 
-
 </script>
-
 
 </body>
 
@@ -3240,12 +3465,16 @@ ${shipping}
 if __name__ == "__main__":
 
     port = integer(
+
         os.getenv(
             "PORT",
             5000
         ),
+
         5000
+
     )
+
 
     app.run(
 
