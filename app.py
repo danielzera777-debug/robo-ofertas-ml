@@ -1,74 +1,77 @@
 import os
 import secrets
-import hashlib
-import base64
-import requests
 import html
+import requests
 
-from urllib.parse import urlencode, quote
-from flask import Flask, request, session
+from flask import (
+    Flask,
+    request,
+    session,
+    redirect,
+    url_for,
+    jsonify,
+    render_template_string
+)
+
+from urllib.parse import urlencode
+
+
+# ============================================================
+# CONFIGURAÇÃO
+# ============================================================
 
 app = Flask(__name__)
 
-
-# ============================================================
-# CONFIGURAÇÕES
-# ============================================================
-
-CLIENT_ID = os.getenv("ML_CLIENT_ID")
-CLIENT_SECRET = os.getenv("ML_CLIENT_SECRET")
-REDIRECT_URI = os.getenv("ML_REDIRECT_URI")
-
-SECRET_KEY = os.getenv(
+app.secret_key = os.getenv(
     "SECRET_KEY",
     secrets.token_hex(32)
 )
-
-app.secret_key = SECRET_KEY
 
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 
+# Mercado Livre
+
+CLIENT_ID = os.getenv("ML_CLIENT_ID")
+CLIENT_SECRET = os.getenv("ML_CLIENT_SECRET")
+REDIRECT_URI = os.getenv("ML_REDIRECT_URI")
+
+
 API_BASE = "https://api.mercadolibre.com"
+
+
+# ============================================================
+# CONFIGURAÇÕES DO ROBÔ
+# ============================================================
 
 SITE_ID = "MLB"
 
 
-# ============================================================
-# CATEGORIAS DE BUSCA
-# ============================================================
+MARGEM_PADRAO = 10
+
 
 CATEGORIAS = {
 
     "celulares":
-    "MLB1055",
-
-    "roupas":
-    "MLB1430",
-
-    "relogios":
-    "MLB3937",
-
-    "eletronicos":
-    "MLB1000",
+        "MLB1055",
 
     "informatica":
-    "MLB1648",
+        "MLB1648",
+
+    "eletronicos":
+        "MLB1000",
+
+    "roupas":
+        "MLB1430",
+
+    "relogios":
+        "MLB3937",
 
     "beleza":
-    "MLB1246"
+        "MLB1246"
 
 }
-
-
-# ============================================================
-# CONFIGURAÇÃO DA REVENDA
-# ============================================================
-
-MARGEM_PADRAO = 10
-
-LUCRO_MINIMO_PADRAO = 20
 
 
 # ============================================================
@@ -81,6 +84,7 @@ def escapar(valor):
     return html.escape(
         str(valor or "")
     )
+
 
 
 def numero(valor):
@@ -114,8 +118,18 @@ def formatar_preco(valor):
 
 
 
+def calcular_preco_venda(custo):
+
+    custo = numero(custo)
+
+    return custo + (
+        custo * MARGEM_PADRAO / 100
+    )
+
+
+
 # ============================================================
-# HEADERS API
+# MERCADO LIVRE API
 # ============================================================
 
 
@@ -124,10 +138,10 @@ def headers_api():
     headers = {
 
         "Accept":
-        "application/json",
+            "application/json",
 
         "User-Agent":
-        "Robo-Ofertas-ML/2.0"
+            "Robo-Ofertas-Instagram-WhatsApp/1.0"
 
     }
 
@@ -149,398 +163,102 @@ def headers_api():
 
 
 # ============================================================
-# REQUEST MERCADO LIVRE
+# LOGIN MERCADO LIVRE
 # ============================================================
 
 
-def requisicao_get(
-    url,
-    params=None
-):
+@app.route("/login")
 
-    try:
+def login():
 
-        return requests.get(
+    params = {
 
-            url,
+        "response_type":
+            "code",
 
-            params=params,
+        "client_id":
+            CLIENT_ID,
 
-            headers=headers_api(),
+        "redirect_uri":
+            REDIRECT_URI
 
-            timeout=30
-
-        )
-
-    except Exception as erro:
-
-        print(
-            erro
-        )
-
-        return None
+    }
 
 
+    url = (
+        "https://auth.mercadolivre.com.br/authorization?"
+        +
+        urlencode(params)
+    )
 
-# ============================================================
-# LOGIN INICIAL
-# ============================================================
+
+    return redirect(url)
 
 
-@app.route("/")
-def home():
 
+
+@app.route("/callback")
+
+def callback():
 
     code = request.args.get(
         "code"
     )
 
-    state = request.args.get(
-        "state"
-    )
 
+    if not code:
 
-    if not CLIENT_ID:
-
-        return "CLIENT_ID faltando",500
-
-
-    if code:
-
-
-        saved_state = session.get(
-            "state"
-        )
-
-
-        if state != saved_state:
-
-            return "State inválido",400
-
-
-        code_verifier = session.get(
-            "code_verifier"
-        )
-
-
-        resposta = requests.post(
-
-            f"{API_BASE}/oauth/token",
-
-            data={
-
-                "grant_type":
-                "authorization_code",
-
-                "client_id":
-                CLIENT_ID,
-
-                "client_secret":
-                CLIENT_SECRET,
-
-                "code":
-                code,
-
-                "redirect_uri":
-                REDIRECT_URI,
-
-                "code_verifier":
-                code_verifier
-
-            },
-
-            timeout=30
-
-        )
-
-
-        if resposta.status_code != 200:
-
-            return resposta.text,400
-
-
-        dados = resposta.json()
-
-
-        session["access_token"] = (
-            dados["access_token"]
-        )
-
-
-        return painel()
+        return "Código não recebido"
 
 
 
-    code_verifier = (
-        secrets.token_urlsafe(64)
-    )
+    dados = {
 
+        "grant_type":
+            "authorization_code",
 
-    challenge = (
-
-        base64.urlsafe_b64encode(
-
-            hashlib.sha256(
-
-                code_verifier.encode()
-
-            ).digest()
-
-        )
-
-        .rstrip(b"=")
-
-        .decode()
-
-    )
-
-
-    state = secrets.token_urlsafe(32)
-
-
-    session["state"] = state
-
-    session["code_verifier"] = (
-        code_verifier
-    )
-
-
-    url = (
-
-        "https://auth.mercadolivre.com.br/authorization?"
-
-        + urlencode({
-
-            "response_type":
-            "code",
-
-            "client_id":
+        "client_id":
             CLIENT_ID,
 
-            "redirect_uri":
-            REDIRECT_URI,
+        "client_secret":
+            CLIENT_SECRET,
 
-            "state":
-            state,
+        "code":
+            code,
 
-            "code_challenge":
-            challenge,
+        "redirect_uri":
+            REDIRECT_URI
 
-            "code_challenge_method":
-            "S256"
+    }
 
-        })
+
+
+    resposta = requests.post(
+
+        f"{API_BASE}/oauth/token",
+
+        data=dados
 
     )
 
 
-    return f"""
 
-    <h1>🤖 Robô Ofertas ML</h1>
+    if resposta.status_code != 200:
 
-    <p>Conecte sua conta Mercado Livre</p>
+        return resposta.text
 
-    <a href="{url}">
-    🔐 Conectar
-    </a>
 
-    """
-    # ============================================================
-# PAINEL PRINCIPAL
-# ============================================================
 
+    token = resposta.json()
 
-def painel():
 
-    return """
 
-    <!DOCTYPE html>
+    session["access_token"] = (
+        token["access_token"]
+    )
 
-    <html>
 
-    <head>
-
-    <meta charset="UTF-8">
-
-    <meta name="viewport"
-    content="width=device-width, initial-scale=1">
-
-    <title>
-    Robô Ofertas ML
-    </title>
-
-    </head>
-
-
-    <body style="
-    font-family:Arial;
-    background:#f5f5f5;
-    padding:20px;
-    ">
-
-
-    <div style="
-    max-width:600px;
-    margin:auto;
-    background:white;
-    padding:25px;
-    border-radius:15px;
-    ">
-
-
-    <h1>
-    🤖 Robô Ofertas ML
-    </h1>
-
-
-    <p>
-    ✅ Mercado Livre conectado
-    </p>
-
-
-    <hr>
-
-
-    <h2>
-    🔎 Buscar ofertas
-    </h2>
-
-
-    <form action="/buscar"
-    method="get">
-
-
-    <input
-    name="q"
-    placeholder="Ex: iPhone, relógio, camiseta..."
-    style="
-    width:100%;
-    padding:15px;
-    font-size:16px;
-    "
-    required>
-
-
-    <br><br>
-
-
-    <label>
-    Categoria
-    </label>
-
-
-    <select
-    name="categoria"
-    style="
-    width:100%;
-    padding:12px;
-    ">
-
-
-    <option value="todas">
-    Todas
-    </option>
-
-
-    <option value="celulares">
-    📱 Celulares
-    </option>
-
-
-    <option value="roupas">
-    👕 Roupas
-    </option>
-
-
-    <option value="relogios">
-    ⌚ Relógios
-    </option>
-
-
-    <option value="eletronicos">
-    🎧 Eletrônicos
-    </option>
-
-
-    <option value="informatica">
-    💻 Informática
-    </option>
-
-
-    <option value="beleza">
-    💄 Beleza
-    </option>
-
-
-    </select>
-
-
-    <br><br>
-
-
-    <label>
-    📈 Margem de lucro %
-    </label>
-
-
-    <input
-    type="number"
-    name="margem"
-    value="10"
-    style="
-    width:100%;
-    padding:12px;
-    ">
-
-
-    <br><br>
-
-
-    <label>
-    💰 Lucro mínimo
-    </label>
-
-
-    <input
-    type="number"
-    name="lucro_minimo"
-    value="20"
-    style="
-    width:100%;
-    padding:12px;
-    ">
-
-
-    <br><br>
-
-
-    <button
-    style="
-    width:100%;
-    padding:15px;
-    background:#3483fa;
-    color:white;
-    border:0;
-    border-radius:8px;
-    font-size:18px;
-    ">
-
-    🔥 Encontrar ofertas
-
-    </button>
-
-
-    </form>
-
-
-    </div>
-
-
-    </body>
-
-    </html>
-
-    """
+    return redirect("/")
 
 
 
@@ -549,139 +267,124 @@ def painel():
 # ============================================================
 
 
-def buscar_produtos(termo, categoria):
+def buscar_produtos(
+        categoria,
+        limite=10
+):
+
+    url = (
+
+        f"{API_BASE}/sites/{SITE_ID}"
+        "/search"
+
+    )
+
 
     params = {
-        "site_id": "MLB",
-        "q": termo,
-        "limit": 50,
-        "sort": "sold_quantity_desc"
+
+        "category":
+            CATEGORIAS.get(
+                categoria,
+                ""
+            ),
+
+        "limit":
+            limite
+
     }
 
 
-    if categoria in CATEGORIAS:
 
-        params["category"] = CATEGORIAS[categoria]
+    resposta = requests.get(
 
+        url,
 
-    resposta = requisicao_get(
-        f"{API_BASE}/sites/MLB/search",
-        params
+        params=params,
+
+        headers=headers_api()
+
     )
 
-    return resposta.json().get("results", [])
 
-    except:
+
+    if resposta.status_code != 200:
 
         return []
-def montar_oferta(produto, margem):
+
+
+
+    return resposta.json().get(
+
+        "results",
+
+        []
+
+    )
+    # ============================================================
+# FILTRO DE OFERTAS
+# ============================================================
+
+
+def analisar_oferta(produto):
 
     preco = numero(
         produto.get("price")
     )
 
-    if preco <= 0:
-        return None
 
-
-    preco_venda = preco * (
-        1 + margem / 100
+    titulo = produto.get(
+        "title",
+        "Produto"
     )
 
 
-    lucro = preco_venda - preco
+    link = produto.get(
+        "permalink",
+        ""
+    )
+
+
+    imagem = produto.get(
+        "thumbnail",
+        ""
+    )
+
+
+    if preco <= 0:
+
+        return None
+
+
+
+    preco_sugerido = calcular_preco_venda(
+        preco
+    )
 
 
     return {
 
-        "id": produto.get("id"),
+        "titulo":
+            titulo,
 
-        "titulo": produto.get(
-            "title",
-            "Produto"
-        ),
+        "preco":
+            preco,
 
-        "imagem": produto.get(
-            "thumbnail"
-        ),
+        "preco_venda":
+            preco_sugerido,
 
-        "preco": preco,
+        "link":
+            link,
 
-        "venda": preco_venda,
+        "imagem":
+            imagem
 
-        "lucro": lucro,
-
-        "link": produto.get(
-            "permalink",
-            ""
-        ),
-
-        "vendidos": produto.get(
-            "sold_quantity",
-            0
-        )
-
-    
-
-
-# ============================================================
-# CALCULAR OFERTA
-# ============================================================
+    }
 
 
 
-    }# ============================================================
-# PÁGINA DE RESULTADOS
-# ============================================================
-
-
-@app.route("/buscar")
-def buscar():
-
-    termo = request.args.get(
-        "q",
-        ""
-    ).strip()
-
-
-    categoria = request.args.get(
-        "categoria",
-        "todas"
-    )
-
-
-    try:
-
-        margem = float(
-            request.args.get(
-                "margem",
-                10
-            )
-        )
-
-    except:
-
-        margem = 10
-
-
-
-    try:
-
-        lucro_minimo = float(
-            request.args.get(
-                "lucro_minimo",
-                20
-            )
-        )
-
-    except:
-
-        lucro_minimo = 20
-
-
+def gerar_ofertas(categoria):
 
     produtos = buscar_produtos(
-        termo,
         categoria
     )
 
@@ -692,524 +395,222 @@ def buscar():
     for produto in produtos:
 
 
-        oferta = montar_oferta(
-            produto,
-            margem
+        oferta = analisar_oferta(
+            produto
         )
 
 
-        if oferta is None:
-
-            continue
-
-
-
-        if oferta["lucro"] >= lucro_minimo:
+        if oferta:
 
             ofertas.append(
                 oferta
             )
 
 
+    return ofertas
 
-    # ordenar pelo mais vendido e maior lucro
 
-    ofertas.sort(
 
-        key=lambda x:
+# ============================================================
+# MENSAGEM PARA WHATSAPP
+# ============================================================
 
-        (
-            x["vendidos"],
-            x["lucro"]
-        ),
 
-        reverse=True
+def criar_mensagem_whatsapp(
+        oferta
+):
 
+
+    mensagem = f"""
+
+🔥 ACHADINHO DO DIA 🔥
+
+
+📦 {oferta['titulo']}
+
+
+💰 Preço encontrado:
+{formatar_preco(oferta['preco'])}
+
+
+🚀 Confira aqui:
+{oferta['link']}
+
+
+⚡ Oferta por tempo limitado!
+
+"""
+
+
+    return mensagem.strip()
+
+
+
+# ============================================================
+# CONTEÚDO PARA INSTAGRAM
+# ============================================================
+
+
+def criar_anuncio_instagram():
+
+    texto = """
+
+🔥 GRUPO VIP DE OFERTAS 🔥
+
+
+Quer receber promoções todos os dias?
+
+
+✅ Produtos baratos
+✅ Ofertas relâmpago
+✅ Achadinhos da internet
+
+
+Entre no nosso grupo gratuito do WhatsApp.
+
+
+👇 Link na bio
+
+"""
+
+
+    return texto.strip()
+
+
+
+# ============================================================
+# ROTAS PRINCIPAIS
+# ============================================================
+
+
+@app.route("/")
+
+def inicio():
+
+    conectado = (
+        "Sim"
+        if session.get("access_token")
+        else
+        "Não"
     )
 
 
-
-    pagina = f"""
-
-    <!DOCTYPE html>
-
-    <html>
-
-    <head>
-
-    <meta charset="UTF-8">
-
-    <meta name="viewport"
-    content="width=device-width, initial-scale=1">
-
-
-    <title>
-    Ofertas
-    </title>
-
-
-    <style>
-
-    body {{
-
-        font-family:Arial;
-        background:#f5f5f5;
-        padding:15px;
-
-    }}
-
-
-    .card {{
-
-        background:white;
-        border-radius:15px;
-        padding:20px;
-        margin-bottom:20px;
-
-    }}
-
-
-    img {{
-
-        width:200px;
-        max-height:200px;
-        object-fit:contain;
-
-    }}
-
-
-    .preco {{
-
-        font-size:18px;
-
-    }}
-
-
-    .venda {{
-
-        color:green;
-        font-size:26px;
-        font-weight:bold;
-
-    }}
-
-
-    .lucro {{
-
-        background:#d4edda;
-        padding:10px;
-        border-radius:8px;
-        font-size:20px;
-
-    }}
-
-
-    .botao {{
-
-        display:inline-block;
-        padding:12px 18px;
-        border-radius:8px;
-        text-decoration:none;
-        color:white;
-        margin-top:10px;
-
-    }}
-
-
-    .mercado {{
-
-        background:#3483fa;
-
-    }}
-
-
-    .zap {{
-
-        background:#25D366;
-
-    }}
-
-
-    </style>
-
-
-    </head>
-
-
-    <body>
-
+    pagina = """
 
     <h1>
-    🔥 Ofertas encontradas
+    🤖 Robô de Ofertas
     </h1>
 
 
     <p>
-    Produto:
-    <b>{escapar(termo)}</b>
+    Mercado Livre conectado:
+    {{conectado}}
     </p>
 
 
-    <p>
-    Oportunidades:
-    <b>{len(ofertas)}</b>
-    </p>
+    <a href="/login">
+    Conectar Mercado Livre
+    </a>
+
+
+    <br><br>
+
+
+    <a href="/ofertas/celulares">
+    Buscar celulares
+    </a>
 
 
     """
 
 
+    return render_template_string(
 
-    if not ofertas:
+        pagina,
 
+        conectado=conectado
 
-        pagina += """
-
-        <div class="card">
-
-        <h2>
-        😕 Nenhum produto encontrado
-        </h2>
+    )
 
 
-        <p>
-        Tente outro produto ou diminua
-        o lucro mínimo.
-        </p>
 
 
-        </div>
 
-        """
+@app.route(
+    "/ofertas/<categoria>"
+)
 
+def ofertas(categoria):
+
+
+    lista = gerar_ofertas(
+        categoria
+    )
+
+
+    return jsonify(
+        lista
+    )
+
+
+
+
+
+@app.route(
+    "/whatsapp/<categoria>"
+)
+
+def whatsapp(categoria):
+
+
+    ofertas = gerar_ofertas(
+        categoria
+    )
+
+
+    mensagens = []
 
 
     for oferta in ofertas:
 
+        mensagens.append(
 
-
-        mensagem = (
-
-            f"🔥 Oferta encontrada!\n\n"
-
-            f"📦 {oferta['titulo']}\n\n"
-
-            f"💰 Por apenas: "
-
-            f"{formatar_preco(oferta['venda'])}\n\n"
-
-            f"🛒 Compre aqui:\n"
-
-            f"{oferta['link']}"
-
-        )
-
-
-
-        whatsapp = (
-
-            "https://wa.me/?text="
-
-            + quote(
-                mensagem
+            criar_mensagem_whatsapp(
+                oferta
             )
 
         )
 
 
+    return jsonify(
 
-        pagina += f"""
-
-        <div class="card">
-
-
-        <img src="{escapar(oferta['imagem'])}">
-
-
-        <h2>
-
-        📦 {escapar(oferta['titulo'])}
-
-        </h2>
-
-
-
-        <p class="preco">
-
-        💵 Compra:
-
-        <b>
-        {formatar_preco(oferta['preco'])}
-        </b>
-
-        </p>
-
-
-
-        <p class="venda">
-
-        🏷️ Venda:
-
-        {formatar_preco(oferta['venda'])}
-
-        </p>
-
-
-
-        <div class="lucro">
-
-        💰 Lucro:
-
-        {formatar_preco(oferta['lucro'])}
-
-        </div>
-
-
-
-        <p>
-
-        🔥 Vendidos:
-
-        {oferta['vendidos']}
-
-        </p>
-
-
-
-        <a class="botao mercado"
-        href="{escapar(oferta['link'])}"
-        target="_blank">
-
-        🛒 Abrir anúncio
-
-        </a>
-
-
-
-        <a class="botao zap"
-        href="{escapar(whatsapp)}"
-        target="_blank">
-
-        📲 Enviar WhatsApp
-
-        </a>
-
-
-
-        </div>
-
-
-        """
-
-
-
-    pagina += """
-
-    <br>
-
-    <a href="/">
-    ← Nova busca
-    </a>
-
-
-    </body>
-
-    </html>
-
-    """
-
-
-
-    return pagina# ============================================================
-# DIAGNÓSTICO
-# ============================================================
-
-
-@app.route("/diagnostico")
-def diagnostico():
-
-
-    if not session.get(
-        "access_token"
-    ):
-
-        return """
-
-        <h2>
-        ❌ Mercado Livre não conectado
-        </h2>
-
-        <a href="/">
-        Voltar
-        </a>
-
-        """
-
-
-
-    resposta = requisicao_get(
-
-        f"{API_BASE}/users/me"
+        mensagens
 
     )
 
 
-    if resposta is None:
-
-        texto = "Erro de conexão"
-
-    else:
-
-        texto = resposta.text
 
 
 
-    return f"""
+@app.route(
+    "/instagram"
+)
 
-    <!DOCTYPE html>
+def instagram():
 
-    <html>
+    return jsonify({
 
-    <head>
+        "anuncio":
+            criar_anuncio_instagram()
 
-    <meta charset="UTF-8">
-
-    <meta name="viewport"
-    content="width=device-width, initial-scale=1">
-
-    <title>
-    Diagnóstico
-    </title>
-
-    </head>
+    })
 
 
-    <body style="
-    font-family:Arial;
-    padding:20px;
-    ">
-
-
-    <h1>
-    🧪 Diagnóstico Mercado Livre
-    </h1>
-
-
-    <p>
-    Status:
-    <b>
-    {resposta.status_code if resposta else "ERRO"}
-    </b>
-    </p>
-
-
-    <pre>
-
-    {escapar(texto)}
-
-    </pre>
-
-
-    <a href="/">
-    ← Voltar
-    </a>
-
-
-    </body>
-
-    </html>
-
-    """
 
 
 
 # ============================================================
-# LOGOUT
-# ============================================================
-
-
-@app.route("/logout")
-def logout():
-
-    session.clear()
-
-
-    return """
-
-    <h1>
-    🔓 Desconectado
-    </h1>
-
-
-    <a href="/">
-    Conectar novamente
-    </a>
-
-    """
-
-
-
-# ============================================================
-# TESTE CONFIGURAÇÃO
-# ============================================================
-
-
-@app.route("/teste-config")
-def teste_config():
-
-
-    return f"""
-
-    <h1>
-    🧪 Configuração
-    </h1>
-
-
-    <p>
-
-    CLIENT_ID:
-
-    <b>
-    {"OK" if CLIENT_ID else "FALTANDO"}
-    </b>
-
-    </p>
-
-
-    <p>
-
-    CLIENT_SECRET:
-
-    <b>
-    {"OK" if CLIENT_SECRET else "FALTANDO"}
-    </b>
-
-    </p>
-
-
-
-    <p>
-
-    REDIRECT_URI:
-
-    <b>
-    {escapar(REDIRECT_URI)}
-    </b>
-
-    </p>
-
-
-
-    <a href="/">
-    Voltar
-    </a>
-
-    """
-
-
-
-# ============================================================
-# INICIAR SERVIDOR
+# INICIALIZAÇÃO
 # ============================================================
 
 
@@ -1223,13 +624,12 @@ if __name__ == "__main__":
         port=int(
 
             os.getenv(
-
                 "PORT",
-
-                10000
-
+                5000
             )
 
-        )
+        ),
+
+        debug=True
 
     )
