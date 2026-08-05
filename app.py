@@ -652,7 +652,19 @@ def rota_instagram():
 # EXECUÇÃO
 # ============================================================
 
+@app.route("/me")
+def me():
 
+    resposta = requests.get(
+        "https://api.mercadolibre.com/users/me",
+        headers=headers_api()
+    )
+
+    return resposta.text
+
+
+
+if __name__ == "__main__":
 if __name__ == "__main__":
 
 
