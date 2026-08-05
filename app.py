@@ -312,7 +312,7 @@ def callback():
 # ============================================================
 
 
-def def buscar_produtos(categoria, limite=10):
+ def buscar_produtos(categoria, limite=10):
 
     url = "https://api.mercadolibre.com/sites/MLB/search"
 
