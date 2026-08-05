@@ -18,7 +18,7 @@ from flask import (
 
 
 # ============================================================
-# CONFIGURAÇÃO FLASK
+# CONFIGURAÇÃO
 # ============================================================
 
 app = Flask(__name__)
@@ -49,13 +49,7 @@ REDIRECT_URI = os.getenv(
 )
 
 
-API_BASE = (
-    "https://api.mercadolibre.com"
-)
-
-
-SITE_ID = "MLB"
-
+API_BASE = "https://api.mercadolibre.com"
 
 
 # ============================================================
@@ -64,26 +58,19 @@ SITE_ID = "MLB"
 
 CATEGORIAS = {
 
-    "celulares":
-        "MLB1055",
+    "celulares": "MLB1055",
 
-    "informatica":
-        "MLB1648",
+    "informatica": "MLB1648",
 
-    "eletronicos":
-        "MLB1000",
+    "eletronicos": "MLB1000",
 
-    "roupas":
-        "MLB1430",
+    "roupas": "MLB1430",
 
-    "relogios":
-        "MLB3937",
+    "relogios": "MLB3937",
 
-    "beleza":
-        "MLB1246"
+    "beleza": "MLB1246"
 
 }
-
 
 
 MARGEM_PADRAO = 10
@@ -98,12 +85,11 @@ MARGEM_PADRAO = 10
 def numero(valor):
 
     try:
-
         return float(valor)
 
     except:
 
-        return 0.0
+        return 0
 
 
 
@@ -126,39 +112,37 @@ def formatar_preco(valor):
 
 
 
-def escapar(valor):
-
-    return html.escape(
-        str(valor or "")
-    )
-
-
-
-# ============================================================
-# HEADERS API
-# ============================================================
-
-
 def headers_api():
 
     headers = {
+
         "Accept": "application/json",
+
         "Content-Type": "application/json",
+
         "User-Agent": "Robo-Ofertas-ML/1.0"
+
     }
 
-    token = session.get("access_token")
+
+    token = session.get(
+        "access_token"
+    )
+
 
     if token:
+
         headers["Authorization"] = (
             f"Bearer {token}"
         )
 
+
     return headers
 
 
+
 # ============================================================
-# LOGIN MERCADO LIVRE COM PKCE
+# LOGIN MERCADO LIVRE PKCE
 # ============================================================
 
 
@@ -197,20 +181,15 @@ def login():
 
     params = {
 
-        "response_type":
-            "code",
+        "response_type": "code",
 
-        "client_id":
-            CLIENT_ID,
+        "client_id": CLIENT_ID,
 
-        "redirect_uri":
-            REDIRECT_URI,
+        "redirect_uri": REDIRECT_URI,
 
-        "code_challenge":
-            code_challenge,
+        "code_challenge": code_challenge,
 
-        "code_challenge_method":
-            "S256"
+        "code_challenge_method": "S256"
 
     }
 
@@ -231,7 +210,7 @@ def login():
 
 
 # ============================================================
-# CALLBACK TOKEN
+# CALLBACK
 # ============================================================
 
 
@@ -275,14 +254,22 @@ def callback():
     }
 
 
+    try:
 
-    resposta = requests.post(
+        resposta = requests.post(
 
-        f"{API_BASE}/oauth/token",
+            f"{API_BASE}/oauth/token",
 
-        data=dados
+            data=dados,
 
-    )
+            timeout=20
+
+        )
+
+
+    except Exception as erro:
+
+        return str(erro)
 
 
 
@@ -295,11 +282,12 @@ def callback():
     token = resposta.json()
 
 
-
     session["access_token"] = (
+
         token.get(
             "access_token"
         )
+
     )
 
 
@@ -312,49 +300,93 @@ def callback():
 # ============================================================
 
 
-def buscar_produtos(categoria, limite=10):
+def buscar_produtos(
+        categoria,
+        limite=10
+):
 
-    url = "https://api.mercadolivre.com/sites/MLB/search"
+
+    url = (
+        f"{API_BASE}/sites/MLB/search"
+    )
+
 
     params = {
-        "q": "celular",
+
+        "q": categoria,
+
         "limit": limite
+
     }
 
-   try:
 
-    resposta = requests.get(
-        url,
-        params=params,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "Robo-Ofertas-ML/1.0"
-        },
-        timeout=15
+    try:
+
+        resposta = requests.get(
+
+            url,
+
+            params=params,
+
+            headers=headers_api(),
+
+            timeout=15
+
+        )
+
+
+    except requests.exceptions.RequestException as erro:
+
+
+        print(
+            "Erro API:",
+            erro
+        )
+
+
+        return []
+
+
+
+    print(
+        "STATUS API:",
+        resposta.status_code
     )
 
-except requests.exceptions.RequestException as erro:
 
-    print("Erro Mercado Livre:", erro)
+    if resposta.status_code != 200:
 
-    return []
+        print(
+            resposta.text
+        )
+
+        return []
+
+
+
+    return resposta.json().get(
+
+        "results",
+
+        []
+
     )
     # ============================================================
-# PROCESSAMENTO DAS OFERTAS
+# TRATAMENTO DAS OFERTAS
 # ============================================================
 
 
-def calcular_preco_venda(custo):
+def calcular_venda(preco):
 
-    custo = numero(custo)
+    preco = numero(preco)
 
-    return custo + (
-        custo * MARGEM_PADRAO / 100
+    return preco + (
+        preco * MARGEM_PADRAO / 100
     )
 
 
 
-def analisar_oferta(produto):
+def analisar_produto(produto):
 
 
     preco = numero(
@@ -376,23 +408,19 @@ def analisar_oferta(produto):
                 "Produto"
             ),
 
-
         "preco":
             preco,
 
-
-        "preco_venda":
-            calcular_preco_venda(
+        "preco_revenda":
+            calcular_venda(
                 preco
             ),
-
 
         "link":
             produto.get(
                 "permalink",
                 ""
             ),
-
 
         "imagem":
             produto.get(
@@ -413,25 +441,25 @@ def gerar_ofertas(categoria):
     )
 
 
-    ofertas = []
+    lista = []
 
 
     for produto in produtos:
 
 
-        oferta = analisar_oferta(
+        item = analisar_produto(
             produto
         )
 
 
-        if oferta:
+        if item:
 
-            ofertas.append(
-                oferta
+            lista.append(
+                item
             )
 
 
-    return ofertas
+    return lista
 
 
 
@@ -440,34 +468,30 @@ def gerar_ofertas(categoria):
 # ============================================================
 
 
-def criar_mensagem_whatsapp(
-        oferta
+def mensagem_whatsapp(
+        produto
 ):
 
 
-    texto = f"""
+    return f"""
 
 🔥 OFERTA ENCONTRADA 🔥
 
 
-📦 {oferta['titulo']}
+📦 {produto['titulo']}
 
 
 💰 Preço:
-{formatar_preco(oferta['preco'])}
+{formatar_preco(produto['preco'])}
 
 
-🛒 Comprar:
-{oferta['link']}
+🛒 Link:
+{produto['link']}
 
 
-⚡ Aproveite enquanto durar!
+⚡ Aproveite!
 
-"""
-
-
-    return texto.strip()
-
+""".strip()
 
 
 
@@ -476,7 +500,7 @@ def criar_mensagem_whatsapp(
 # ============================================================
 
 
-def criar_anuncio_instagram():
+def anuncio_instagram():
 
 
     return """
@@ -484,16 +508,15 @@ def criar_anuncio_instagram():
 🔥 GRUPO VIP DE OFERTAS 🔥
 
 
-Quer receber promoções todos os dias?
+Quer receber produtos com desconto?
 
 
-✅ Descontos
+✅ Promoções todos os dias
 ✅ Achadinhos
 ✅ Ofertas relâmpago
 
 
-Entre no nosso grupo gratuito do WhatsApp.
-
+Entre no nosso grupo do WhatsApp.
 
 👇 Link na bio
 
@@ -502,7 +525,7 @@ Entre no nosso grupo gratuito do WhatsApp.
 
 
 # ============================================================
-# ROTAS DO SISTEMA
+# TELAS
 # ============================================================
 
 
@@ -521,39 +544,44 @@ def inicio():
 
     pagina = """
 
-    <h1>
-    🤖 Robô de Ofertas
-    </h1>
+<h1>🤖 Robô de Ofertas</h1>
 
 
-    <p>
-    Mercado Livre conectado:
-    {{status}}
-    </p>
+<p>
+Mercado Livre conectado:
+<b>{{status}}</b>
+</p>
 
 
-    <a href="/login">
-    Conectar Mercado Livre
-    </a>
+<a href="/login">
+Conectar Mercado Livre
+</a>
 
 
-    <br><br>
+<br><br>
 
 
-    <a href="/ofertas/celulares">
-    Buscar celulares
-    </a>
+<a href="/ofertas/celulares">
+Buscar celulares
+</a>
 
 
-    """
+<br><br>
 
+
+<a href="/instagram">
+Anúncio Instagram
+</a>
+
+"""
 
 
     return render_template_string(
 
         pagina,
 
-        status="Sim"
+        status=
+        "Sim"
         if conectado
         else
         "Não"
@@ -562,13 +590,16 @@ def inicio():
 
 
 
+# ============================================================
+# ROTAS DE OFERTAS
+# ============================================================
 
 
 @app.route(
     "/ofertas/<categoria>"
 )
 
-def rota_ofertas(
+def ofertas(
         categoria
 ):
 
@@ -583,13 +614,11 @@ def rota_ofertas(
 
 
 
-
-
 @app.route(
     "/whatsapp/<categoria>"
 )
 
-def rota_whatsapp(
+def whatsapp(
         categoria
 ):
 
@@ -602,13 +631,13 @@ def rota_whatsapp(
     mensagens = []
 
 
-    for oferta in ofertas:
+    for produto in ofertas:
 
 
         mensagens.append(
 
-            criar_mensagem_whatsapp(
-                oferta
+            mensagem_whatsapp(
+                produto
             )
 
         )
@@ -620,50 +649,72 @@ def rota_whatsapp(
 
 
 
-
-
 @app.route(
     "/instagram"
 )
 
-def rota_instagram():
+def instagram():
 
 
     return jsonify({
 
         "anuncio":
-            criar_anuncio_instagram()
+            anuncio_instagram()
 
     })
 
 
 
-
-
 # ============================================================
-# EXECUÇÃO
+# TESTE DE CONEXÃO MERCADO LIVRE
 # ============================================================
+
 
 @app.route("/me")
 def me():
 
-    resposta = requests.get(
-        "https://api.mercadolibre.com/users/me",
-        headers=headers_api()
-    )
 
-    return resposta.text
+    try:
 
+        resposta = requests.get(
+
+            f"{API_BASE}/users/me",
+
+            headers=headers_api(),
+
+            timeout=15
+
+        )
+
+
+        return resposta.text
+
+
+    except Exception as erro:
+
+        return str(erro)
+
+
+
+# ============================================================
+# INICIALIZAÇÃO
+# ============================================================
 
 
 if __name__ == "__main__":
 
+
     app.run(
+
         host="0.0.0.0",
+
         port=int(
+
             os.getenv(
                 "PORT",
                 5000
             )
+
         )
+
     )
