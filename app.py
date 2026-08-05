@@ -17,7 +17,7 @@ from flask import (
 
 
 # ============================================================
-# APLICAÇÃO
+# CONFIGURAÇÃO
 # ============================================================
 
 app = Flask(__name__)
@@ -44,16 +44,15 @@ API_BASE = "https://api.mercadolibre.com"
 
 
 # ============================================================
-# CONFIGURAÇÕES DA BUSCA
+# CONFIGURAÇÕES
 # ============================================================
 
 LIMITE_PADRAO = 20
-
 MARGEM_PADRAO = 10
 
 
 # ============================================================
-# FUNÇÕES AUXILIARES
+# AUXILIARES
 # ============================================================
 
 def numero(valor):
@@ -81,12 +80,13 @@ def headers_api():
 
     headers = {
         "Accept": "application/json",
-        "User-Agent": "Robo-Ofertas-ML/2.0"
+        "User-Agent": "Robo-Ofertas-ML/3.1"
     }
 
     token = session.get("access_token")
 
     if token:
+
         headers["Authorization"] = (
             f"Bearer {token}"
         )
@@ -95,16 +95,21 @@ def headers_api():
 
 
 # ============================================================
-# BUSCA GENÉRICA
+# BUSCA DE PRODUTOS
 # ============================================================
 
-def buscar_produtos(termo, limite=LIMITE_PADRAO):
+def buscar_produtos(
+    termo,
+    limite=LIMITE_PADRAO
+):
 
     termo = str(
         termo or ""
     ).strip()
 
+
     if not termo:
+
         return []
 
 
@@ -129,47 +134,111 @@ def buscar_produtos(termo, limite=LIMITE_PADRAO):
 
 
     parametros = {
-        "q": termo,
-        "limit": limite,
-        "sort": "relevance"
+
+        "q":
+            termo,
+
+        "limit":
+            limite,
+
+        "sort":
+            "relevance"
+
     }
+
+
+    print(
+        "================================================"
+    )
+
+    print(
+        "BUSCA MERCADO LIVRE"
+    )
+
+    print(
+        "TERMO:",
+        termo
+    )
+
+    print(
+        "URL:",
+        url
+    )
+
+    print(
+        "TOKEN EXISTE:",
+        bool(
+            session.get(
+                "access_token"
+            )
+        )
+    )
 
 
     try:
 
         resposta = requests.get(
+
             url,
+
             params=parametros,
+
             headers=headers_api(),
+
             timeout=20
+
         )
 
 
     except requests.exceptions.RequestException as erro:
 
         print(
-            "ERRO DE CONEXÃO COM MERCADO LIVRE:",
+            "ERRO DE CONEXÃO:",
             erro
         )
 
-        return []
+        raise RuntimeError(
+            "Não foi possível conectar "
+            "ao Mercado Livre: "
+            + str(erro)
+        )
 
 
     print(
-        "MERCADO LIVRE STATUS:",
+        "STATUS:",
         resposta.status_code
     )
 
+    print(
+        "RESPOSTA:",
+        resposta.text[:2000]
+    )
+
+
+    # ========================================================
+    # ERRO DA API
+    # ========================================================
 
     if resposta.status_code != 200:
 
-        print(
-            "MERCADO LIVRE RESPOSTA:",
-            resposta.text[:1000]
+        raise RuntimeError(
+
+            "Mercado Livre respondeu "
+
+            + str(
+                resposta.status_code
+            )
+
+            + ": "
+
+            + resposta.text[:1000]
+
         )
 
-        return []
 
+    # ========================================================
+    # JSON
+    # ========================================================
 
     try:
 
@@ -177,11 +246,10 @@ def buscar_produtos(termo, limite=LIMITE_PADRAO):
 
     except ValueError:
 
-        print(
-            "Resposta do Mercado Livre não é JSON."
+        raise RuntimeError(
+            "O Mercado Livre retornou "
+            "uma resposta que não é JSON."
         )
-
-        return []
 
 
     resultados = dados.get(
@@ -195,31 +263,39 @@ def buscar_produtos(termo, limite=LIMITE_PADRAO):
 
     for item in resultados:
 
+
         preco = numero(
             item.get("price")
         )
 
 
         if preco <= 0:
+
             continue
 
 
-        margem = (
-            preco *
-            MARGEM_PADRAO /
+        lucro = (
+
+            preco
+            *
+            MARGEM_PADRAO
+            /
             100
+
         )
 
 
         preco_revenda = (
-            preco + margem
+            preco + lucro
         )
 
 
         ofertas.append({
 
             "id":
-                item.get("id"),
+                item.get(
+                    "id"
+                ),
 
             "titulo":
                 item.get(
@@ -251,13 +327,13 @@ def buscar_produtos(termo, limite=LIMITE_PADRAO):
 
             "lucro":
                 round(
-                    margem,
+                    lucro,
                     2
                 ),
 
             "lucro_formatado":
                 formatar_preco(
-                    margem
+                    lucro
                 ),
 
             "imagem":
@@ -293,6 +369,12 @@ def buscar_produtos(termo, limite=LIMITE_PADRAO):
         })
 
 
+    print(
+        "PRODUTOS ENCONTRADOS:",
+        len(ofertas)
+    )
+
+
     return ofertas
 
 
@@ -325,7 +407,7 @@ def api_buscar():
     termo = request.args.get(
         "produto",
         ""
-    )
+    ).strip()
 
 
     limite = request.args.get(
@@ -334,54 +416,85 @@ def api_buscar():
     )
 
 
-    if not termo.strip():
+    if not termo:
 
         return jsonify({
+
             "ok": False,
+
             "produtos": [],
+
             "mensagem":
                 "Digite o nome de um produto."
+
+        }), 400
+
+
+    try:
+
+        produtos = buscar_produtos(
+
+            termo,
+
+            limite
+
+        )
+
+
+        return jsonify({
+
+            "ok": True,
+
+            "termo": termo,
+
+            "quantidade":
+                len(produtos),
+
+            "produtos":
+                produtos
+
         })
 
 
-    produtos = buscar_produtos(
-        termo,
-        limite
-    )
+    except Exception as erro:
+
+        print(
+            "ERRO NA BUSCA:",
+            erro
+        )
 
 
-    return jsonify({
+        return jsonify({
 
-        "ok": True,
+            "ok": False,
 
-        "termo": termo,
+            "produtos": [],
 
-        "quantidade":
-            len(produtos),
+            "mensagem":
+                str(erro)
 
-        "produtos":
-            produtos
-
-    })
+        }), 502
 
 
 # ============================================================
-# LOGIN MERCADO LIVRE COM PKCE
+# LOGIN MERCADO LIVRE - PKCE
 # ============================================================
 
 @app.route("/login")
 def login():
 
     if not CLIENT_ID:
+
         return (
-            "ML_CLIENT_ID não configurado no Render.",
+            "ERRO: ML_CLIENT_ID não está configurado.",
             500
         )
 
 
     if not REDIRECT_URI:
+
         return (
-            "ML_REDIRECT_URI não configurado no Render.",
+            "ERRO: ML_REDIRECT_URI não está configurado.",
             500
         )
 
@@ -392,18 +505,22 @@ def login():
 
 
     digest = hashlib.sha256(
+
         code_verifier.encode(
             "utf-8"
         )
+
     ).digest()
 
 
     code_challenge = (
+
         base64.urlsafe_b64encode(
             digest
         )
         .decode("utf-8")
         .rstrip("=")
+
     )
 
 
@@ -433,8 +550,13 @@ def login():
 
 
     url = (
+
         "https://auth.mercadolivre.com.br/authorization?"
-        + urlencode(parametros)
+
+        +
+
+        urlencode(parametros)
+
     )
 
 
@@ -452,6 +574,7 @@ def callback():
         "error"
     )
 
+
     if erro:
 
         descricao = request.args.get(
@@ -460,7 +583,8 @@ def callback():
         )
 
         return (
-            f"Erro na autorização: {descricao}",
+            "Erro do Mercado Livre: "
+            + descricao,
             400
         )
 
@@ -487,7 +611,7 @@ def callback():
 
         return (
             "code_verifier não encontrado. "
-            "Inicie a conexão novamente.",
+            "Faça a conexão novamente.",
             400
         )
 
@@ -536,25 +660,33 @@ def callback():
     except requests.exceptions.RequestException as erro:
 
         print(
-            "ERRO TOKEN:",
+            "ERRO AO OBTER TOKEN:",
             erro
         )
 
         return (
-            "Não foi possível conectar ao Mercado Livre.",
+            "Erro de conexão ao obter "
+            "token do Mercado Livre.",
             502
         )
 
 
+    print(
+        "TOKEN STATUS:",
+        resposta.status_code
+    )
+
+    print(
+        "TOKEN RESPOSTA:",
+        resposta.text[:1000]
+    )
+
+
     if resposta.status_code != 200:
 
-        print(
-            "ERRO TOKEN ML:",
-            resposta.text
-        )
-
         return (
-            "Mercado Livre recusou a autorização: "
+            "Mercado Livre recusou "
+            "a autorização: "
             + resposta.text,
             400
         )
@@ -567,7 +699,8 @@ def callback():
     except ValueError:
 
         return (
-            "Resposta inválida do Mercado Livre.",
+            "Resposta inválida "
+            "do Mercado Livre.",
             502
         )
 
@@ -580,7 +713,8 @@ def callback():
     if not access_token:
 
         return (
-            "Mercado Livre não retornou access_token.",
+            "O Mercado Livre não retornou "
+            "access_token.",
             400
         )
 
@@ -612,7 +746,7 @@ def callback():
 
 
 # ============================================================
-# DESCONECTAR
+# LOGOUT
 # ============================================================
 
 @app.route("/logout")
@@ -624,19 +758,55 @@ def logout():
 
 
 # ============================================================
-# TESTE DA CONTA
+# STATUS
+# ============================================================
+
+@app.route("/api/status")
+def api_status():
+
+    conectado = bool(
+        session.get(
+            "access_token"
+        )
+    )
+
+
+    return jsonify({
+
+        "ok": True,
+
+        "app":
+            "Robo de Ofertas",
+
+        "mercado_livre":
+            conectado,
+
+        "versao":
+            "3.1"
+
+    })
+
+
+# ============================================================
+# TESTE DA CONTA MERCADO LIVRE
 # ============================================================
 
 @app.route("/api/me")
 def api_me():
 
-    if not session.get(
+    token = session.get(
         "access_token"
-    ):
+    )
+
+
+    if not token:
 
         return jsonify({
 
             "ok": False,
+
+            "mercado_livre":
+                False,
 
             "mensagem":
                 "Mercado Livre não conectado."
@@ -669,6 +839,12 @@ def api_me():
         }), 502
 
 
+    print(
+        "USERS/ME STATUS:",
+        resposta.status_code
+    )
+
+
     if resposta.status_code != 200:
 
         return jsonify({
@@ -678,59 +854,36 @@ def api_me():
             "status":
                 resposta.status_code,
 
-            "resposta":
+            "mensagem":
                 resposta.text
 
         }), resposta.status_code
 
 
+    try:
+
+        dados = resposta.json()
+
+    except ValueError:
+
+        dados = {}
+
+
     return jsonify({
 
         "ok": True,
+
+        "mercado_livre":
+            True,
 
         "dados":
-            resposta.json()
-
-    })
-    # ============================================================
-# OFERTAS POR CATEGORIA / TERMO
-# ============================================================
-
-@app.route("/ofertas/<termo>")
-def ofertas(termo):
-
-    termo = str(termo or "").strip()
-
-    if not termo:
-
-        return jsonify({
-            "ok": False,
-            "produtos": [],
-            "mensagem": "Termo de busca vazio."
-        })
-
-    produtos = buscar_produtos(
-        termo,
-        LIMITE_PADRAO
-    )
-
-    return jsonify({
-
-        "ok": True,
-
-        "termo": termo,
-
-        "quantidade":
-            len(produtos),
-
-        "produtos":
-            produtos
+            dados
 
     })
 
 
 # ============================================================
-# GERAR TEXTO PARA WHATSAPP
+# WHATSAPP
 # ============================================================
 
 @app.route("/api/whatsapp")
@@ -741,31 +894,37 @@ def api_whatsapp():
         "Oferta"
     )
 
+
     preco = request.args.get(
         "preco",
         "0"
     )
+
 
     link = request.args.get(
         "link",
         ""
     )
 
+
     mensagem = f"""🔥 OFERTA ENCONTRADA 🔥
 
 📦 {titulo}
 
-💰 Por apenas: {preco}
+💰 Preço:
+{preco}
 
-🛒 Confira aqui:
+🛒 Confira:
 {link}
 
 ⚡ Aproveite enquanto estiver disponível!
 """
 
+
     return jsonify({
 
-        "ok": True,
+        "ok":
+            True,
 
         "mensagem":
             mensagem
@@ -774,7 +933,7 @@ def api_whatsapp():
 
 
 # ============================================================
-# TEXTO PARA ANÚNCIO DO INSTAGRAM
+# INSTAGRAM
 # ============================================================
 
 @app.route("/api/instagram")
@@ -795,41 +954,14 @@ Entre no nosso grupo do WhatsApp.
 #ofertas #promocoes #achadinhos #descontos
 """
 
+
     return jsonify({
 
-        "ok": True,
+        "ok":
+            True,
 
         "mensagem":
             mensagem
-
-    })
-
-
-# ============================================================
-# STATUS DO APLICATIVO
-# ============================================================
-
-@app.route("/api/status")
-def api_status():
-
-    conectado = bool(
-        session.get(
-            "access_token"
-        )
-    )
-
-    return jsonify({
-
-        "ok": True,
-
-        "mercado_livre":
-            conectado,
-
-        "app":
-            "Robo de Ofertas",
-
-        "versao":
-            "3.0"
 
     })
 
@@ -866,7 +998,7 @@ def health():
 # ============================================================
 
 @app.errorhandler(404)
-def pagina_nao_encontrada(erro):
+def erro_404(erro):
 
     if request.path.startswith(
         "/api/"
@@ -896,12 +1028,13 @@ def pagina_nao_encontrada(erro):
 # ============================================================
 
 @app.errorhandler(500)
-def erro_interno(erro):
+def erro_500(erro):
 
     print(
         "ERRO INTERNO:",
         erro
     )
+
 
     if request.path.startswith(
         "/api/"
@@ -924,7 +1057,7 @@ def erro_interno(erro):
 
 
 # ============================================================
-# INICIALIZAÇÃO
+# EXECUÇÃO
 # ============================================================
 
 if __name__ == "__main__":
@@ -935,6 +1068,7 @@ if __name__ == "__main__":
             "5000"
         )
     )
+
 
     app.run(
 
