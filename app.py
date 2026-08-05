@@ -142,30 +142,19 @@ def escapar(valor):
 def headers_api():
 
     headers = {
-
-        "Accept":
-            "application/json",
-
-        "User-Agent":
-            "Robo-Ofertas-ML"
-
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "Robo-Ofertas-ML/1.0"
     }
 
-
-    token = session.get(
-        "access_token"
-    )
-
+    token = session.get("access_token")
 
     if token:
-
         headers["Authorization"] = (
             f"Bearer {token}"
         )
 
-
     return headers
-
 
 
 # ============================================================
