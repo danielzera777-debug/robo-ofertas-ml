@@ -2,158 +2,390 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+    <meta
+        name="theme-color"
+        content="#007aff"
+    >
+    <meta
+        name="apple-mobile-web-app-capable"
+        content="yes"
+    >
+    <meta
+        name="apple-mobile-web-app-status-bar-style"
+        content="black-translucent"
+    >
+    <meta
+        name="apple-mobile-web-app-title"
+        content="Robô Ofertas"
+    >
     <title>Robô de Ofertas</title>
-    <link rel="manifest"
-          href="/static/manifest.json">
-    <link rel="stylesheet"
-          href="/static/style.css">
-    <meta name="apple-mobile-web-app-capable"
-          content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style"
-          content="black">
-    <meta name="apple-mobile-web-app-title"
-          content="Robô Ofertas">
+    <link
+        rel="manifest"
+        href="/static/manifest.json"
+    >
+    <link
+        rel="stylesheet"
+        href="/static/style.css"
+    >
 </head>
 <body>
 <div class="app">
     <h1>🤖 Robô de Ofertas</h1>
-    <p>Encontre produtos e oportunidades de revenda</p>
+    <p>
+        Encontre ofertas de qualquer produto
+    </p>
     <div class="busca">
         <input
             id="produto"
             type="search"
-            placeholder="Digite qualquer produto..."
+            placeholder="Ex.: celular, notebook, tênis..."
+            autocomplete="off"
         >
-        <button onclick="buscar()">
+        <button
+            id="botaoBuscar"
+            onclick="buscar()"
+        >
             Buscar
         </button>
     </div>
+    <div id="status"></div>
     <div id="resultado"></div>
 </div>
 <script>
+// ============================================================
+// REGISTRO DO SERVICE WORKER
+// ============================================================
+if ("serviceWorker" in navigator) {
+    window.addEventListener(
+        "load",
+        function() {
+            navigator.serviceWorker
+                .register(
+                    "/static/service-worker.js"
+                )
+                .catch(
+                    function(erro) {
+                        console.log(
+                            "Service Worker:",
+                            erro
+                        );
+                    }
+                );
+        }
+    );
+}
+// ============================================================
+// BUSCAR PRODUTOS
+// ============================================================
 async function buscar() {
     const campo =
-        document.getElementById("produto");
+        document.getElementById(
+            "produto"
+        );
+    const botao =
+        document.getElementById(
+            "botaoBuscar"
+        );
+    const resultado =
+        document.getElementById(
+            "resultado"
+        );
+    const status =
+        document.getElementById(
+            "status"
+        );
     const termo =
         campo.value.trim();
-    const area =
-        document.getElementById("resultado");
     if (!termo) {
-        alert("Digite um produto.");
+        status.innerHTML =
+            "<p>Digite um produto para pesquisar.</p>";
         return;
     }
-    area.innerHTML =
+    botao.disabled = true;
+    botao.innerText = "Buscando...";
+    resultado.innerHTML = "";
+    status.innerHTML =
         "<p>🔎 Procurando ofertas...</p>";
     try {
-        const resposta = await fetch(
-            "/api/buscar?produto=" +
-            encodeURIComponent(termo)
-        );
+        const resposta =
+            await fetch(
+                "/api/buscar?produto=" +
+                encodeURIComponent(
+                    termo
+                ) +
+                "&limite=20"
+            );
+        const dados =
+            await resposta.json();
         if (!resposta.ok) {
             throw new Error(
-                "Erro HTTP " +
-                resposta.status
+                dados.mensagem ||
+                "Erro na busca."
             );
         }
+        resultado.innerHTML = "";
         const produtos =
-            await resposta.json();
-        area.innerHTML = "";
-        if (!Array.isArray(produtos) ||
-            produtos.length === 0) {
-            area.innerHTML =
-                "<p>Nenhuma oferta encontrada.</p>";
+            Array.isArray(
+                dados.produtos
+            )
+            ? dados.produtos
+            : [];
+        if (
+            !dados.ok ||
+            produtos.length === 0
+        ) {
+            status.innerHTML =
+                "<p>❌ Nenhuma oferta encontrada para <b>" +
+                escaparHtml(termo) +
+                "</b>.</p>";
             return;
         }
-        produtos.forEach(produto => {
-            const card =
-                document.createElement("div");
-            card.className = "produto";
-            const preco =
-                Number(produto.preco || 0)
-                .toFixed(2)
-                .replace(".", ",");
-            const revenda =
-                Number(produto.revenda || 0)
-                .toFixed(2)
-                .replace(".", ",");
-            card.innerHTML = `
-                <img
-                    src="${produto.imagem || ""}"
-                    alt="Produto"
-                >
-                <h3>
-                    ${produto.titulo || "Produto"}
-                </h3>
-                <p>
-                    Preço:
-                    <strong>
-                        R$ ${preco}
-                    </strong>
-                </p>
-                <p>
-                    Revenda sugerida:
-                    <strong>
-                        R$ ${revenda}
-                    </strong>
-                </p>
-                <a
-                    href="${produto.link || "#"}"
-                    target="_blank"
-                    rel="noopener"
-                >
-                    Ver produto
-                </a>
-                <button
-                    onclick="compartilhar(
-                        ${JSON.stringify(
-                            produto.titulo || "Oferta"
-                        )},
-                        ${JSON.stringify(
-                            produto.link || ""
-                        )}
-                    )"
-                >
-                    Compartilhar
-                </button>
-            `;
-            area.appendChild(card);
-        });
-    } catch (erro) {
-        console.error(erro);
-        area.innerHTML =
+        status.innerHTML =
+            "<p>✅ " +
+            produtos.length +
+            " ofertas encontradas.</p>";
+        produtos.forEach(
+            function(produto) {
+                criarCard(
+                    produto,
+                    resultado
+                );
+            }
+        );
+    }
+    catch (erro) {
+        console.error(
+            erro
+        );
+        status.innerHTML =
             "<p>❌ Não foi possível realizar a busca.</p>";
+        resultado.innerHTML =
+            "<p>Verifique a conexão e tente novamente.</p>";
+    }
+    finally {
+        botao.disabled = false;
+        botao.innerText =
+            "Buscar";
     }
 }
-async function compartilhar(nome, link) {
-    if (navigator.share) {
-        try {
-            await navigator.share({
-                title: nome,
-                text:
-                    "🔥 Olha essa oferta!",
-                url: link
-            });
-        } catch (erro) {
-            console.log(
-                "Compartilhamento cancelado."
-            );
+// ============================================================
+// CRIAR CARD
+// ============================================================
+function criarCard(
+    produto,
+    area
+) {
+    const card =
+        document.createElement(
+            "div"
+        );
+    card.className =
+        "produto";
+    const titulo =
+        produto.titulo ||
+        "Produto";
+    const imagem =
+        produto.imagem ||
+        "";
+    const preco =
+        produto.preco_formatado ||
+        formatarPreco(
+            produto.preco
+        );
+    const revenda =
+        produto.revenda_formatada ||
+        formatarPreco(
+            produto.revenda
+        );
+    const lucro =
+        produto.lucro_formatado ||
+        formatarPreco(
+            produto.lucro
+        );
+    const link =
+        produto.link ||
+        "#";
+    card.innerHTML = `
+        ${
+            imagem
+            ?
+            `
+            <img
+                src="${escaparAtributo(imagem)}"
+                alt="${escaparAtributo(titulo)}"
+                loading="lazy"
+            >
+            `
+            :
+            ""
         }
-    } else {
-        try {
-            await navigator.clipboard.writeText(
+        <h3>
+            ${escaparHtml(titulo)}
+        </h3>
+        <p>
+            Preço:
+            <strong>
+                ${escaparHtml(preco)}
+            </strong>
+        </p>
+        <p>
+            Revenda sugerida:
+            <strong>
+                ${escaparHtml(revenda)}
+            </strong>
+        </p>
+        <p>
+            Lucro estimado:
+            <strong>
+                ${escaparHtml(lucro)}
+            </strong>
+        </p>
+        <a
+            href="${escaparAtributo(link)}"
+            target="_blank"
+            rel="noopener noreferrer"
+        >
+            🛒 Ver produto
+        </a>
+        <button
+            type="button"
+            class="botaoCompartilhar"
+        >
+            📲 Compartilhar
+        </button>
+    `;
+    const botaoCompartilhar =
+        card.querySelector(
+            ".botaoCompartilhar"
+        );
+    botaoCompartilhar.addEventListener(
+        "click",
+        function() {
+            compartilhar(
+                titulo,
                 link
             );
-            alert(
-                "Link copiado!"
-            );
-        } catch {
-            alert(
-                "Link: " + link
-            );
         }
+    );
+    area.appendChild(
+        card
+    );
+}
+// ============================================================
+// COMPARTILHAR
+// ============================================================
+async function compartilhar(
+    titulo,
+    link
+) {
+    if (
+        !link ||
+        link === "#"
+    ) {
+        alert(
+            "Link do produto não disponível."
+        );
+        return;
     }
+    try {
+        if (
+            navigator.share
+        ) {
+            await navigator.share({
+                title:
+                    titulo,
+                text:
+                    "🔥 Confira esta oferta!",
+                url:
+                    link
+            });
+            return;
+        }
+        await navigator.clipboard.writeText(
+            link
+        );
+        alert(
+            "Link copiado para a área de transferência!"
+        );
+    }
+    catch (erro) {
+        console.log(
+            "Compartilhamento:",
+            erro
+        );
+    }
+}
+// ============================================================
+// ENTER PARA BUSCAR
+// ============================================================
+document
+    .getElementById("produto")
+    .addEventListener(
+        "keydown",
+        function(event) {
+            if (
+                event.key === "Enter"
+            ) {
+                buscar();
+            }
+        }
+    );
+// ============================================================
+// FORMATAÇÃO
+// ============================================================
+function formatarPreco(
+    valor
+) {
+    const numero =
+        Number(valor || 0);
+    return numero.toLocaleString(
+        "pt-BR",
+        {
+            style: "currency",
+            currency: "BRL"
+        }
+    );
+}
+// ============================================================
+// SEGURANÇA HTML
+// ============================================================
+function escaparHtml(
+    valor
+) {
+    return String(
+        valor || ""
+    )
+    .replace(
+        /&/g,
+        "&amp;"
+    )
+    .replace(
+        /</g,
+        "&lt;"
+    )
+    .replace(
+        />/g,
+        "&gt;"
+    )
+    .replace(
+        /"/g,
+        "&quot;"
+    )
+    .replace(
+        /'/g,
+        "&#039;"
+    );
+}
+function escaparAtributo(
+    valor
+) {
+    return escaparHtml(
+        valor
+    );
 }
 </script>
 </body>
