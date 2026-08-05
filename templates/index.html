@@ -15,12 +15,8 @@
         content="yes"
     >
     <meta
-        name="apple-mobile-web-app-status-bar-style"
-        content="black-translucent"
-    >
-    <meta
         name="apple-mobile-web-app-title"
-        content="Robô Ofertas"
+        content="Robô de Ofertas"
     >
     <title>Robô de Ofertas</title>
     <link
@@ -33,33 +29,73 @@
     >
 </head>
 <body>
-<div class="app">
-    <h1>🤖 Robô de Ofertas</h1>
-    <p>
-        Encontre ofertas de qualquer produto
-    </p>
-    <div class="busca">
+<main class="app">
+    <header>
+        <h1>
+            🤖 Robô de Ofertas
+        </h1>
+        <p>
+            Encontre ofertas do Mercado Livre
+        </p>
+    </header>
+    <!-- =====================================================
+         CONEXÃO MERCADO LIVRE
+    ====================================================== -->
+    <section class="conexao">
+        {% if conectado %}
+            <div class="status conectado">
+                🟢 Mercado Livre conectado
+            </div>
+            <a
+                class="botao"
+                href="/logout"
+            >
+                Desconectar
+            </a>
+        {% else %}
+            <div class="status desconectado">
+                🔴 Mercado Livre não conectado
+            </div>
+            <a
+                class="botao conectar"
+                href="/login"
+            >
+                🔗 Conectar Mercado Livre
+            </a>
+        {% endif %}
+    </section>
+    <!-- =====================================================
+         BUSCA
+    ====================================================== -->
+    <section class="busca">
         <input
             id="produto"
             type="search"
-            placeholder="Ex.: celular, notebook, tênis..."
+            placeholder="Digite um produto..."
             autocomplete="off"
         >
         <button
             id="botaoBuscar"
+            type="button"
             onclick="buscar()"
         >
-            Buscar
+            🔎 Buscar
         </button>
-    </div>
+    </section>
     <div id="status"></div>
-    <div id="resultado"></div>
-</div>
+    <section
+        id="resultado"
+        class="resultado"
+    ></section>
+</main>
 <script>
 // ============================================================
-// REGISTRO DO SERVICE WORKER
+// SERVICE WORKER
 // ============================================================
-if ("serviceWorker" in navigator) {
+if (
+    "serviceWorker"
+    in navigator
+) {
     window.addEventListener(
         "load",
         function() {
@@ -79,7 +115,7 @@ if ("serviceWorker" in navigator) {
     );
 }
 // ============================================================
-// BUSCAR PRODUTOS
+// BUSCAR
 // ============================================================
 async function buscar() {
     const campo =
@@ -90,64 +126,74 @@ async function buscar() {
         document.getElementById(
             "botaoBuscar"
         );
-    const resultado =
-        document.getElementById(
-            "resultado"
-        );
     const status =
         document.getElementById(
             "status"
+        );
+    const resultado =
+        document.getElementById(
+            "resultado"
         );
     const termo =
         campo.value.trim();
     if (!termo) {
         status.innerHTML =
-            "<p>Digite um produto para pesquisar.</p>";
+            "⚠️ Digite um produto.";
         return;
     }
     botao.disabled = true;
-    botao.innerText = "Buscando...";
+    botao.innerText =
+        "🔎 Buscando...";
     resultado.innerHTML = "";
     status.innerHTML =
-        "<p>🔎 Procurando ofertas...</p>";
+        "⏳ Procurando ofertas...";
     try {
         const resposta =
             await fetch(
-                "/api/buscar?produto=" +
+                "/api/buscar?produto="
+                +
                 encodeURIComponent(
                     termo
-                ) +
+                )
+                +
                 "&limite=20"
             );
         const dados =
             await resposta.json();
         if (!resposta.ok) {
             throw new Error(
-                dados.mensagem ||
+                dados.mensagem
+                ||
                 "Erro na busca."
             );
         }
-        resultado.innerHTML = "";
         const produtos =
             Array.isArray(
                 dados.produtos
             )
-            ? dados.produtos
-            : [];
+            ?
+            dados.produtos
+            :
+            [];
         if (
-            !dados.ok ||
             produtos.length === 0
         ) {
             status.innerHTML =
-                "<p>❌ Nenhuma oferta encontrada para <b>" +
-                escaparHtml(termo) +
-                "</b>.</p>";
+                "❌ Nenhuma oferta encontrada para <b>"
+                +
+                escapar(
+                    termo
+                )
+                +
+                "</b>.";
             return;
         }
         status.innerHTML =
-            "<p>✅ " +
-            produtos.length +
-            " ofertas encontradas.</p>";
+            "✅ "
+            +
+            produtos.length
+            +
+            " ofertas encontradas.";
         produtos.forEach(
             function(produto) {
                 criarCard(
@@ -162,18 +208,20 @@ async function buscar() {
             erro
         );
         status.innerHTML =
-            "<p>❌ Não foi possível realizar a busca.</p>";
-        resultado.innerHTML =
-            "<p>Verifique a conexão e tente novamente.</p>";
+            "❌ Erro: "
+            +
+            escapar(
+                erro.message
+            );
     }
     finally {
         botao.disabled = false;
         botao.innerText =
-            "Buscar";
+            "🔎 Buscar";
     }
 }
 // ============================================================
-// CRIAR CARD
+// CARD DO PRODUTO
 // ============================================================
 function criarCard(
     produto,
@@ -181,33 +229,39 @@ function criarCard(
 ) {
     const card =
         document.createElement(
-            "div"
+            "article"
         );
     card.className =
         "produto";
     const titulo =
-        produto.titulo ||
+        produto.titulo
+        ||
         "Produto";
     const imagem =
-        produto.imagem ||
+        produto.imagem
+        ||
         "";
     const preco =
-        produto.preco_formatado ||
+        produto.preco_formatado
+        ||
         formatarPreco(
             produto.preco
         );
     const revenda =
-        produto.revenda_formatada ||
+        produto.revenda_formatada
+        ||
         formatarPreco(
             produto.revenda
         );
     const lucro =
-        produto.lucro_formatado ||
+        produto.lucro_formatado
+        ||
         formatarPreco(
             produto.lucro
         );
     const link =
-        produto.link ||
+        produto.link
+        ||
         "#";
     card.innerHTML = `
         ${
@@ -215,37 +269,38 @@ function criarCard(
             ?
             `
             <img
-                src="${escaparAtributo(imagem)}"
-                alt="${escaparAtributo(titulo)}"
+                src="${escapar(imagem)}"
+                alt="${escapar(titulo)}"
                 loading="lazy"
             >
             `
             :
             ""
         }
-        <h3>
-            ${escaparHtml(titulo)}
-        </h3>
+        <h2>
+            ${escapar(titulo)}
+        </h2>
         <p>
-            Preço:
+            💰 Preço:
             <strong>
-                ${escaparHtml(preco)}
+                ${escapar(preco)}
             </strong>
         </p>
         <p>
-            Revenda sugerida:
+            🏷️ Revenda:
             <strong>
-                ${escaparHtml(revenda)}
+                ${escapar(revenda)}
             </strong>
         </p>
         <p>
-            Lucro estimado:
+            📈 Lucro estimado:
             <strong>
-                ${escaparHtml(lucro)}
+                ${escapar(lucro)}
             </strong>
         </p>
         <a
-            href="${escaparAtributo(link)}"
+            class="produto-link"
+            href="${escapar(link)}"
             target="_blank"
             rel="noopener noreferrer"
         >
@@ -253,16 +308,16 @@ function criarCard(
         </a>
         <button
             type="button"
-            class="botaoCompartilhar"
+            class="compartilhar"
         >
             📲 Compartilhar
         </button>
     `;
-    const botaoCompartilhar =
+    const compartilharBotao =
         card.querySelector(
-            ".botaoCompartilhar"
+            ".compartilhar"
         );
-    botaoCompartilhar.addEventListener(
+    compartilharBotao.addEventListener(
         "click",
         function() {
             compartilhar(
@@ -282,15 +337,6 @@ async function compartilhar(
     titulo,
     link
 ) {
-    if (
-        !link ||
-        link === "#"
-    ) {
-        alert(
-            "Link do produto não disponível."
-        );
-        return;
-    }
     try {
         if (
             navigator.share
@@ -309,21 +355,22 @@ async function compartilhar(
             link
         );
         alert(
-            "Link copiado para a área de transferência!"
+            "Link copiado!"
         );
     }
     catch (erro) {
         console.log(
-            "Compartilhamento:",
             erro
         );
     }
 }
 // ============================================================
-// ENTER PARA BUSCAR
+// ENTER
 // ============================================================
 document
-    .getElementById("produto")
+    .getElementById(
+        "produto"
+    )
     .addEventListener(
         "keydown",
         function(event) {
@@ -340,20 +387,22 @@ document
 function formatarPreco(
     valor
 ) {
-    const numero =
-        Number(valor || 0);
-    return numero.toLocaleString(
+    return Number(
+        valor || 0
+    ).toLocaleString(
         "pt-BR",
         {
-            style: "currency",
-            currency: "BRL"
+            style:
+                "currency",
+            currency:
+                "BRL"
         }
     );
 }
 // ============================================================
-// SEGURANÇA HTML
+// SEGURANÇA
 // ============================================================
-function escaparHtml(
+function escapar(
     valor
 ) {
     return String(
@@ -378,13 +427,6 @@ function escaparHtml(
     .replace(
         /'/g,
         "&#039;"
-    );
-}
-function escaparAtributo(
-    valor
-) {
-    return escaparHtml(
-        valor
     );
 }
 </script>
