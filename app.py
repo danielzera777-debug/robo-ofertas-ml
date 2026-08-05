@@ -323,67 +323,29 @@ def callback():
 # ============================================================
 
 
-def buscar_produtos(
-        categoria,
-        limite=10
-):
+def buscar_produtos(categoria, limite=10):
 
-
-    categoria_id = CATEGORIAS.get(
-        categoria
-    )
-
-
-    if not categoria_id:
-
-        return []
-
-
-
-    url = (
-
-        f"{API_BASE}/sites/{SITE_ID}/search"
-
-    )
-
-
+    url = "https://api.mercadolibre.com/sites/MLB/search"
 
     params = {
-
-        "category":
-            categoria_id,
-
-        "limit":
-            limite
-
+        "q": "celular",
+        "limit": limite
     }
 
-
-
     resposta = requests.get(
-
         url,
-
         params=params,
-
         headers=headers_api()
-
     )
 
-
+    print(resposta.text)
 
     if resposta.status_code != 200:
-
         return []
 
-
-
     return resposta.json().get(
-
         "results",
-
         []
-
     )
     # ============================================================
 # PROCESSAMENTO DAS OFERTAS
