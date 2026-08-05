@@ -1,3 +1,160 @@
-static/style.css
-static/manifest.json
-static/service-worker.js
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+    <title>Robô de Ofertas</title>
+    <link rel="manifest"
+          href="/static/manifest.json">
+    <link rel="stylesheet"
+          href="/static/style.css">
+    <meta name="apple-mobile-web-app-capable"
+          content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style"
+          content="black">
+    <meta name="apple-mobile-web-app-title"
+          content="Robô Ofertas">
+</head>
+<body>
+<div class="app">
+    <h1>🤖 Robô de Ofertas</h1>
+    <p>Encontre produtos e oportunidades de revenda</p>
+    <div class="busca">
+        <input
+            id="produto"
+            type="search"
+            placeholder="Digite qualquer produto..."
+        >
+        <button onclick="buscar()">
+            Buscar
+        </button>
+    </div>
+    <div id="resultado"></div>
+</div>
+<script>
+async function buscar() {
+    const campo =
+        document.getElementById("produto");
+    const termo =
+        campo.value.trim();
+    const area =
+        document.getElementById("resultado");
+    if (!termo) {
+        alert("Digite um produto.");
+        return;
+    }
+    area.innerHTML =
+        "<p>🔎 Procurando ofertas...</p>";
+    try {
+        const resposta = await fetch(
+            "/api/buscar?produto=" +
+            encodeURIComponent(termo)
+        );
+        if (!resposta.ok) {
+            throw new Error(
+                "Erro HTTP " +
+                resposta.status
+            );
+        }
+        const produtos =
+            await resposta.json();
+        area.innerHTML = "";
+        if (!Array.isArray(produtos) ||
+            produtos.length === 0) {
+            area.innerHTML =
+                "<p>Nenhuma oferta encontrada.</p>";
+            return;
+        }
+        produtos.forEach(produto => {
+            const card =
+                document.createElement("div");
+            card.className = "produto";
+            const preco =
+                Number(produto.preco || 0)
+                .toFixed(2)
+                .replace(".", ",");
+            const revenda =
+                Number(produto.revenda || 0)
+                .toFixed(2)
+                .replace(".", ",");
+            card.innerHTML = `
+                <img
+                    src="${produto.imagem || ""}"
+                    alt="Produto"
+                >
+                <h3>
+                    ${produto.titulo || "Produto"}
+                </h3>
+                <p>
+                    Preço:
+                    <strong>
+                        R$ ${preco}
+                    </strong>
+                </p>
+                <p>
+                    Revenda sugerida:
+                    <strong>
+                        R$ ${revenda}
+                    </strong>
+                </p>
+                <a
+                    href="${produto.link || "#"}"
+                    target="_blank"
+                    rel="noopener"
+                >
+                    Ver produto
+                </a>
+                <button
+                    onclick="compartilhar(
+                        ${JSON.stringify(
+                            produto.titulo || "Oferta"
+                        )},
+                        ${JSON.stringify(
+                            produto.link || ""
+                        )}
+                    )"
+                >
+                    Compartilhar
+                </button>
+            `;
+            area.appendChild(card);
+        });
+    } catch (erro) {
+        console.error(erro);
+        area.innerHTML =
+            "<p>❌ Não foi possível realizar a busca.</p>";
+    }
+}
+async function compartilhar(nome, link) {
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: nome,
+                text:
+                    "🔥 Olha essa oferta!",
+                url: link
+            });
+        } catch (erro) {
+            console.log(
+                "Compartilhamento cancelado."
+            );
+        }
+    } else {
+        try {
+            await navigator.clipboard.writeText(
+                link
+            );
+            alert(
+                "Link copiado!"
+            );
+        } catch {
+            alert(
+                "Link: " + link
+            );
+        }
+    }
+}
+</script>
+</body>
+</html>
