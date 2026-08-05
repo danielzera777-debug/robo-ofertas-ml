@@ -312,9 +312,9 @@ def callback():
 # ============================================================
 
 
- def buscar_produtos(categoria, limite=10):
+def buscar_produtos(categoria, limite=10):
 
-    url = "https://api.mercadolibre.com/sites/MLB/search"
+    url = "https://api.mercadolivre.com/sites/MLB/search"
 
     params = {
         "q": "celular",
