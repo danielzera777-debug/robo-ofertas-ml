@@ -321,24 +321,23 @@ def buscar_produtos(categoria, limite=10):
         "limit": limite
     }
 
+   try:
+
     resposta = requests.get(
         url,
         params=params,
         headers={
             "Accept": "application/json",
             "User-Agent": "Robo-Ofertas-ML/1.0"
-        }
+        },
+        timeout=15
     )
 
-    print("STATUS API:", resposta.status_code)
-    print("RESPOSTA API:", resposta.text[:500])
+except requests.exceptions.RequestException as erro:
 
-    if resposta.status_code != 200:
-        return []
+    print("Erro Mercado Livre:", erro)
 
-    return resposta.json().get(
-        "results",
-        []
+    return []
     )
     # ============================================================
 # PROCESSAMENTO DAS OFERTAS
