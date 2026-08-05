@@ -1,4 +1,5 @@
 import os
+import time
 import secrets
 import hashlib
 import base64
@@ -17,7 +18,7 @@ from flask import (
 
 
 # ============================================================
-# APP
+# APLICAÇÃO
 # ============================================================
 
 app = Flask(__name__)
@@ -38,21 +39,33 @@ app.config["SESSION_COOKIE_SECURE"] = True
 # MERCADO LIVRE
 # ============================================================
 
-CLIENT_ID = os.getenv(
-    "ML_CLIENT_ID"
+CLIENT_ID = os.getenv("ML_CLIENT_ID")
+CLIENT_SECRET = os.getenv("ML_CLIENT_SECRET")
+REDIRECT_URI = os.getenv("ML_REDIRECT_URI")
+
+API_BASE = "https://api.mercadolibre.com"
+
+AUTH_URL = (
+    "https://auth.mercadolivre.com.br/authorization"
 )
 
-CLIENT_SECRET = os.getenv(
-    "ML_CLIENT_SECRET"
-)
 
-REDIRECT_URI = os.getenv(
-    "ML_REDIRECT_URI"
-)
+# ============================================================
+# TOKEN DO ROBÔ
+#
+# Como este robô é de uso próprio, mantemos também uma cópia
+# no processo do servidor.
+#
+# Isso evita que uma rota veja a sessão e outra não veja.
+# ============================================================
 
-API_BASE = (
-    "https://api.mercadolibre.com"
-)
+ML_TOKEN = None
+
+ML_REFRESH_TOKEN = None
+
+ML_USER_ID = None
+
+ML_TOKEN_EXPIRES_AT = 0
 
 
 # ============================================================
@@ -65,7 +78,7 @@ MARGEM_PADRAO = 10
 
 
 # ============================================================
-# FUNÇÕES AUXILIARES
+# UTILITÁRIOS
 # ============================================================
 
 def numero(valor):
@@ -90,28 +103,294 @@ def formatar_preco(valor):
 
 
 # ============================================================
-# HEADERS
+# TOKEN ATUAL
 # ============================================================
 
-def headers_api():
+def obter_token():
 
-    headers = {
-        "Accept":
-            "application/json",
+    global ML_TOKEN
 
-        "User-Agent":
-            "Robo-Ofertas-ML/4.0"
-    }
+    # Primeiro tenta a memória do servidor.
+    if ML_TOKEN:
 
+        return ML_TOKEN
+
+    # Depois tenta a sessão.
     token = session.get(
         "access_token"
     )
 
     if token:
 
+        ML_TOKEN = token
+
+        return token
+
+    return None
+
+
+# ============================================================
+# SALVAR TOKEN
+# ============================================================
+
+def salvar_tokens(dados):
+
+    global ML_TOKEN
+    global ML_REFRESH_TOKEN
+    global ML_USER_ID
+    global ML_TOKEN_EXPIRES_AT
+
+    access_token = dados.get(
+        "access_token"
+    )
+
+    refresh_token = dados.get(
+        "refresh_token"
+    )
+
+    user_id = dados.get(
+        "user_id"
+    )
+
+    expires_in = numero(
+        dados.get(
+            "expires_in",
+            21600
+        )
+    )
+
+
+    if not access_token:
+
+        raise RuntimeError(
+            "Mercado Livre não retornou access_token."
+        )
+
+
+    # Memória do servidor
+    ML_TOKEN = access_token
+
+    ML_REFRESH_TOKEN = (
+        refresh_token
+    )
+
+    ML_USER_ID = user_id
+
+    ML_TOKEN_EXPIRES_AT = (
+        time.time()
+        +
+        expires_in
+        -
+        60
+    )
+
+
+    # Sessão
+    session["access_token"] = (
+        access_token
+    )
+
+    if refresh_token:
+
+        session["refresh_token"] = (
+            refresh_token
+        )
+
+    if user_id:
+
+        session["user_id"] = (
+            user_id
+        )
+
+    session["token_expires_at"] = (
+        ML_TOKEN_EXPIRES_AT
+    )
+
+    session.modified = True
+
+
+    print(
+        "TOKEN SALVO COM SUCESSO."
+    )
+
+    print(
+        "USER ID:",
+        user_id
+    )
+
+    print(
+        "EXPIRA EM:",
+        int(expires_in),
+        "segundos"
+    )
+
+
+# ============================================================
+# REFRESH TOKEN
+# ============================================================
+
+def renovar_token():
+
+    global ML_REFRESH_TOKEN
+
+    refresh_token = (
+        ML_REFRESH_TOKEN
+        or
+        session.get(
+            "refresh_token"
+        )
+    )
+
+
+    if not refresh_token:
+
+        return False
+
+
+    dados = {
+
+        "grant_type":
+            "refresh_token",
+
+        "client_id":
+            CLIENT_ID,
+
+        "client_secret":
+            CLIENT_SECRET,
+
+        "refresh_token":
+            refresh_token
+
+    }
+
+
+    try:
+
+        resposta = requests.post(
+
+            f"{API_BASE}/oauth/token",
+
+            data=dados,
+
+            headers={
+                "Accept":
+                    "application/json",
+
+                "Content-Type":
+                    "application/x-www-form-urlencoded"
+            },
+
+            timeout=30
+
+        )
+
+    except requests.exceptions.RequestException as erro:
+
+        print(
+            "ERRO REFRESH:",
+            erro
+        )
+
+        return False
+
+
+    print(
+        "REFRESH STATUS:",
+        resposta.status_code
+    )
+
+
+    if resposta.status_code != 200:
+
+        print(
+            "REFRESH RESPOSTA:",
+            resposta.text[:1000]
+        )
+
+        return False
+
+
+    try:
+
+        dados_token = (
+            resposta.json()
+        )
+
+    except ValueError:
+
+        return False
+
+
+    salvar_tokens(
+        dados_token
+    )
+
+    return True
+
+
+# ============================================================
+# GARANTIR TOKEN
+# ============================================================
+
+def garantir_token():
+
+    token = obter_token()
+
+
+    if not token:
+
+        return None
+
+
+    # Verifica expiração conhecida.
+    if (
+        ML_TOKEN_EXPIRES_AT
+        and
+        time.time()
+        >=
+        ML_TOKEN_EXPIRES_AT
+    ):
+
+        print(
+            "ACCESS TOKEN EXPIRADO. RENOVANDO..."
+        )
+
+        if renovar_token():
+
+            return obter_token()
+
+        return None
+
+
+    return token
+
+
+# ============================================================
+# HEADERS API
+# ============================================================
+
+def headers_api():
+
+    token = garantir_token()
+
+
+    headers = {
+
+        "Accept":
+            "application/json",
+
+        "User-Agent":
+            "Robo-Ofertas-ML/5.0"
+
+    }
+
+
+    if token:
+
         headers["Authorization"] = (
             f"Bearer {token}"
         )
+
 
     return headers
 
@@ -123,20 +402,24 @@ def headers_api():
 @app.route("/")
 def inicio():
 
+    token = garantir_token()
+
     conectado = bool(
-        session.get(
-            "access_token"
-        )
+        token
     )
 
+
     return render_template(
+
         "index.html",
+
         conectado=conectado
+
     )
 
 
 # ============================================================
-# LOGIN MERCADO LIVRE
+# LOGIN
 # ============================================================
 
 @app.route("/login")
@@ -145,7 +428,7 @@ def login():
     if not CLIENT_ID:
 
         return (
-            "ERRO: ML_CLIENT_ID não configurado no Render.",
+            "ML_CLIENT_ID não configurado no Render.",
             500
         )
 
@@ -153,7 +436,7 @@ def login():
     if not CLIENT_SECRET:
 
         return (
-            "ERRO: ML_CLIENT_SECRET não configurado no Render.",
+            "ML_CLIENT_SECRET não configurado no Render.",
             500
         )
 
@@ -161,7 +444,7 @@ def login():
     if not REDIRECT_URI:
 
         return (
-            "ERRO: ML_REDIRECT_URI não configurado no Render.",
+            "ML_REDIRECT_URI não configurado no Render.",
             500
         )
 
@@ -179,10 +462,8 @@ def login():
     # PKCE
     # --------------------------------------------------------
 
-    code_verifier = (
-        secrets.token_urlsafe(
-            64
-        )
+    code_verifier = secrets.token_urlsafe(
+        64
     )
 
 
@@ -208,23 +489,14 @@ def login():
     )
 
 
-    # --------------------------------------------------------
-    # SALVAR NA SESSÃO
-    # --------------------------------------------------------
-
     session["oauth_state"] = state
 
     session["code_verifier"] = (
         code_verifier
     )
 
-
     session.modified = True
 
-
-    # --------------------------------------------------------
-    # URL DO MERCADO LIVRE
-    # --------------------------------------------------------
 
     parametros = {
 
@@ -250,23 +522,22 @@ def login():
 
 
     url = (
-
-        "https://auth.mercadolivre.com.br/authorization?"
-
+        AUTH_URL
+        +
+        "?"
         +
         urlencode(
             parametros
         )
-
     )
 
 
     print(
-        "INICIANDO LOGIN MERCADO LIVRE"
+        "LOGIN MERCADO LIVRE"
     )
 
     print(
-        "REDIRECT_URI:",
+        "REDIRECT:",
         REDIRECT_URI
     )
 
@@ -283,10 +554,6 @@ def login():
 @app.route("/callback")
 def callback():
 
-    # --------------------------------------------------------
-    # ERRO
-    # --------------------------------------------------------
-
     erro = request.args.get(
         "error"
     )
@@ -299,17 +566,20 @@ def callback():
             erro
         )
 
-
         return (
-            "Mercado Livre retornou erro: "
-            + descricao,
-            400
-        )
 
+            "<h2>Erro no Mercado Livre</h2>"
 
-    # --------------------------------------------------------
-    # CODE
-    # --------------------------------------------------------
+            "<p>"
+
+            +
+            descricao
+
+            +
+            "</p>"
+
+        ), 400
+
 
     code = request.args.get(
         "code"
@@ -324,14 +594,9 @@ def callback():
         )
 
 
-    # --------------------------------------------------------
-    # STATE
-    # --------------------------------------------------------
-
     state_recebido = request.args.get(
         "state"
     )
-
 
     state_salvo = session.get(
         "oauth_state"
@@ -341,10 +606,12 @@ def callback():
     if not state_salvo:
 
         return (
+
             "Sessão OAuth perdida. "
-            "Clique novamente em Conectar Mercado Livre.",
-            400
-        )
+            "Volte ao robô e clique novamente "
+            "em Conectar Mercado Livre."
+
+        ), 400
 
 
     if state_recebido != state_salvo:
@@ -355,10 +622,6 @@ def callback():
         )
 
 
-    # --------------------------------------------------------
-    # CODE VERIFIER
-    # --------------------------------------------------------
-
     code_verifier = session.get(
         "code_verifier"
     )
@@ -367,15 +630,10 @@ def callback():
     if not code_verifier:
 
         return (
-            "code_verifier não encontrado. "
-            "Inicie a conexão novamente.",
+            "code_verifier não encontrado.",
             400
         )
 
-
-    # --------------------------------------------------------
-    # TROCAR CODE POR TOKEN
-    # --------------------------------------------------------
 
     dados = {
 
@@ -415,7 +673,10 @@ def callback():
 
             headers={
                 "Accept":
-                    "application/json"
+                    "application/json",
+
+                "Content-Type":
+                    "application/x-www-form-urlencoded"
             },
 
             timeout=30
@@ -430,8 +691,7 @@ def callback():
         )
 
         return (
-            "Erro de conexão com "
-            "o Mercado Livre.",
+            "Não foi possível conectar ao Mercado Livre.",
             502
         )
 
@@ -441,18 +701,17 @@ def callback():
         resposta.status_code
     )
 
-    print(
-        "OAUTH RESPOSTA:",
-        resposta.text[:2000]
-    )
-
 
     if resposta.status_code != 200:
 
+        print(
+            "OAUTH ERRO:",
+            resposta.text[:1500]
+        )
+
         return (
 
-            "Mercado Livre recusou "
-            "a autorização.<br><br>"
+            "<h2>Mercado Livre recusou a conexão</h2>"
 
             "<pre>"
 
@@ -479,48 +738,22 @@ def callback():
         )
 
 
-    access_token = token_data.get(
-        "access_token"
-    )
+    try:
 
+        salvar_tokens(
+            token_data
+        )
 
-    refresh_token = token_data.get(
-        "refresh_token"
-    )
+    except Exception as erro:
 
-
-    if not access_token:
+        print(
+            "ERRO SALVANDO TOKEN:",
+            erro
+        )
 
         return (
-            "Mercado Livre não retornou access_token.",
-            400
-        )
-
-
-    # --------------------------------------------------------
-    # SALVAR TOKEN
-    # --------------------------------------------------------
-
-    session["access_token"] = (
-        access_token
-    )
-
-
-    if refresh_token:
-
-        session["refresh_token"] = (
-            refresh_token
-        )
-
-
-    if token_data.get(
-        "user_id"
-    ):
-
-        session["user_id"] = (
-            token_data.get(
-                "user_id"
-            )
+            "Token recebido, mas não foi possível salvá-lo.",
+            500
         )
 
 
@@ -529,24 +762,29 @@ def callback():
         None
     )
 
-
     session.pop(
         "code_verifier",
         None
     )
 
-
     session.modified = True
 
 
-    print(
-        "MERCADO LIVRE CONECTADO!"
-    )
+    # --------------------------------------------------------
+    # TESTE IMEDIATO
+    # --------------------------------------------------------
+
+    token = obter_token()
 
 
-    # --------------------------------------------------------
-    # TESTAR TOKEN
-    # --------------------------------------------------------
+    if not token:
+
+        return (
+            "O Mercado Livre autorizou, "
+            "mas o token não ficou disponível.",
+            500
+        )
+
 
     try:
 
@@ -556,30 +794,41 @@ def callback():
 
             headers={
                 "Authorization":
-                    f"Bearer {access_token}",
+                    f"Bearer {token}",
 
                 "Accept":
                     "application/json",
 
                 "User-Agent":
-                    "Robo-Ofertas-ML/4.0"
+                    "Robo-Ofertas-ML/5.0"
             },
 
-            timeout=20
+            timeout=30
 
         )
 
 
         print(
-            "TESTE TOKEN:",
+            "TESTE USERS/ME:",
             teste.status_code
         )
 
 
-        print(
-            "TESTE RESPOSTA:",
-            teste.text[:1000]
-        )
+        if teste.status_code in (
+            200,
+            206
+        ):
+
+            print(
+                "MERCADO LIVRE CONECTADO!"
+            )
+
+        else:
+
+            print(
+                "USERS/ME:",
+                teste.text[:1000]
+            )
 
 
     except Exception as erro:
@@ -596,29 +845,13 @@ def callback():
 
 
 # ============================================================
-# LOGOUT
-# ============================================================
-
-@app.route("/logout")
-def logout():
-
-    session.clear()
-
-    return redirect(
-        "/"
-    )
-
-
-# ============================================================
 # STATUS
 # ============================================================
 
 @app.route("/api/status")
 def api_status():
 
-    token = session.get(
-        "access_token"
-    )
+    token = garantir_token()
 
 
     return jsonify({
@@ -632,22 +865,27 @@ def api_status():
         "mercado_livre":
             bool(token),
 
+        "user_id":
+            ML_USER_ID
+            or
+            session.get(
+                "user_id"
+            ),
+
         "versao":
-            "4.0"
+            "5.0"
 
     })
 
 
 # ============================================================
-# TESTE DA CONTA
+# MINHA CONTA
 # ============================================================
 
 @app.route("/api/me")
 def api_me():
 
-    token = session.get(
-        "access_token"
-    )
+    token = garantir_token()
 
 
     if not token:
@@ -674,7 +912,7 @@ def api_me():
 
             headers=headers_api(),
 
-            timeout=20
+            timeout=30
 
         )
 
@@ -685,23 +923,65 @@ def api_me():
             "ok":
                 False,
 
+            "mercado_livre":
+                True,
+
             "mensagem":
+                "Erro de conexão com Mercado Livre.",
+
+            "detalhes":
                 str(erro)
 
         }), 502
 
 
     print(
-        "USERS/ME:",
+        "API /users/me:",
         resposta.status_code
     )
 
-    print(
-        resposta.text[:1000]
-    )
+
+    if resposta.status_code in (
+        401,
+        403
+    ):
+
+        print(
+            "TOKEN RECUSADO. TENTANDO REFRESH..."
+        )
 
 
-    if resposta.status_code != 200:
+        if renovar_token():
+
+            try:
+
+                resposta = requests.get(
+
+                    f"{API_BASE}/users/me",
+
+                    headers=headers_api(),
+
+                    timeout=30
+
+                )
+
+            except requests.exceptions.RequestException as erro:
+
+                return jsonify({
+
+                    "ok":
+                        False,
+
+                    "mensagem":
+                        str(erro)
+
+                }), 502
+
+
+    if resposta.status_code not in (
+        200,
+        206
+    ):
 
         return jsonify({
 
@@ -709,13 +989,16 @@ def api_me():
                 False,
 
             "mercado_livre":
-                False,
+                True,
 
             "status":
                 resposta.status_code,
 
             "mensagem":
-                resposta.text
+                "Mercado Livre recusou a requisição.",
+
+            "resposta":
+                resposta.text[:2000]
 
         }), resposta.status_code
 
@@ -746,13 +1029,23 @@ def api_me():
 
 
 # ============================================================
-# BUSCAR PRODUTOS
+# BUSCA DE PRODUTOS
 # ============================================================
 
 def buscar_produtos(
     termo,
-    limite=LIMITE_PADRAO
+    limite=20
 ):
+
+    token = garantir_token()
+
+
+    if not token:
+
+        raise RuntimeError(
+            "Mercado Livre não está conectado."
+        )
+
 
     termo = str(
         termo or ""
@@ -764,15 +1057,6 @@ def buscar_produtos(
         return []
 
 
-    if not session.get(
-        "access_token"
-    ):
-
-        raise RuntimeError(
-            "Mercado Livre não está conectado."
-        )
-
-
     try:
 
         limite = int(
@@ -781,7 +1065,7 @@ def buscar_produtos(
 
     except (TypeError, ValueError):
 
-        limite = LIMITE_PADRAO
+        limite = 20
 
 
     limite = max(
@@ -798,7 +1082,7 @@ def buscar_produtos(
     )
 
 
-    parametros = {
+    params = {
 
         "q":
             termo,
@@ -806,16 +1090,10 @@ def buscar_produtos(
         "limit":
             limite,
 
-        "sort":
-            "relevance"
+        "offset":
+            0
 
     }
-
-
-    print(
-        "BUSCANDO:",
-        termo
-    )
 
 
     try:
@@ -824,7 +1102,7 @@ def buscar_produtos(
 
             url,
 
-            params=parametros,
+            params=params,
 
             headers=headers_api(),
 
@@ -836,20 +1114,54 @@ def buscar_produtos(
 
         raise RuntimeError(
             "Erro de conexão com Mercado Livre: "
-            + str(erro)
+            +
+            str(erro)
         )
 
 
     print(
-        "BUSCA STATUS:",
+        "BUSCA:",
+        termo,
+        "STATUS:",
         resposta.status_code
     )
 
 
-    print(
-        "BUSCA RESPOSTA:",
-        resposta.text[:2000]
-    )
+    # --------------------------------------------------------
+    # TOKEN EXPIRADO / RECUSADO
+    # --------------------------------------------------------
+
+    if resposta.status_code in (
+        401,
+        403
+    ):
+
+        print(
+            "TOKEN RECUSADO NA BUSCA."
+        )
+
+
+        if renovar_token():
+
+            try:
+
+                resposta = requests.get(
+
+                    url,
+
+                    params=params,
+
+                    headers=headers_api(),
+
+                    timeout=30
+
+                )
+
+            except requests.exceptions.RequestException as erro:
+
+                raise RuntimeError(
+                    str(erro)
+                )
 
 
     if resposta.status_code != 200:
@@ -909,18 +1221,18 @@ def buscar_produtos(
 
 
         lucro = (
-
             preco
             *
             MARGEM_PADRAO
             /
             100
-
         )
 
 
         revenda = (
-            preco + lucro
+            preco
+            +
+            lucro
         )
 
 
@@ -998,7 +1310,7 @@ def buscar_produtos(
 
 
 # ============================================================
-# API BUSCAR
+# API BUSCA
 # ============================================================
 
 @app.route("/api/buscar")
@@ -1012,7 +1324,7 @@ def api_buscar():
 
     limite = request.args.get(
         "limite",
-        LIMITE_PADRAO
+        20
     )
 
 
@@ -1027,7 +1339,7 @@ def api_buscar():
                 [],
 
             "mensagem":
-                "Digite um produto."
+                "Digite o nome de um produto."
 
         }), 400
 
@@ -1130,82 +1442,31 @@ def ofertas(termo):
 
 
 # ============================================================
-# WHATSAPP
+# DESCONEXÃO
 # ============================================================
 
-@app.route("/api/whatsapp")
-def api_whatsapp():
+@app.route("/logout")
+def logout():
 
-    titulo = request.args.get(
-        "titulo",
-        "Oferta"
+    global ML_TOKEN
+    global ML_REFRESH_TOKEN
+    global ML_USER_ID
+    global ML_TOKEN_EXPIRES_AT
+
+    ML_TOKEN = None
+
+    ML_REFRESH_TOKEN = None
+
+    ML_USER_ID = None
+
+    ML_TOKEN_EXPIRES_AT = 0
+
+    session.clear()
+
+
+    return redirect(
+        "/"
     )
-
-    preco = request.args.get(
-        "preco",
-        "0"
-    )
-
-    link = request.args.get(
-        "link",
-        ""
-    )
-
-
-    mensagem = f"""🔥 OFERTA 🔥
-
-📦 {titulo}
-
-💰 {preco}
-
-🛒 Confira:
-{link}
-
-⚡ Aproveite!
-"""
-
-
-    return jsonify({
-
-        "ok":
-            True,
-
-        "mensagem":
-            mensagem
-
-    })
-
-
-# ============================================================
-# INSTAGRAM
-# ============================================================
-
-@app.route("/api/instagram")
-def api_instagram():
-
-    mensagem = """🔥 GRUPO VIP DE OFERTAS 🔥
-
-Receba ofertas e promoções todos os dias.
-
-📱 Produtos de várias categorias
-💰 Achadinhos
-⚡ Promoções
-
-👉 Entre no nosso grupo do WhatsApp.
-
-#ofertas #promocoes #descontos
-"""
-
-
-    return jsonify({
-
-        "ok":
-            True,
-
-        "mensagem":
-            mensagem
-
-    })
 
 
 # ============================================================
@@ -1217,26 +1478,20 @@ def health():
 
     return jsonify({
 
+        "ok":
+            True,
+
         "status":
-            "online"
+            "online",
+
+        "versao":
+            "5.0"
 
     })
 
 
 # ============================================================
-# SERVICE WORKER
-# ============================================================
-
-@app.route("/service-worker.js")
-def service_worker():
-
-    return app.send_static_file(
-        "service-worker.js"
-    )
-
-
-# ============================================================
-# 404
+# ERRO 404
 # ============================================================
 
 @app.errorhandler(404)
@@ -1267,7 +1522,7 @@ def erro_404(erro):
 
 
 # ============================================================
-# 500
+# ERRO 500
 # ============================================================
 
 @app.errorhandler(500)
@@ -1279,15 +1534,25 @@ def erro_500(erro):
     )
 
 
-    return jsonify({
+    if request.path.startswith(
+        "/api/"
+    ):
 
-        "ok":
-            False,
+        return jsonify({
 
-        "mensagem":
-            "Erro interno no aplicativo."
+            "ok":
+                False,
 
-    }), 500
+            "mensagem":
+                "Erro interno no aplicativo."
+
+        }), 500
+
+
+    return (
+        "Erro interno no aplicativo.",
+        500
+    )
 
 
 # ============================================================
