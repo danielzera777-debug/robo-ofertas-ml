@@ -1,12 +1,40 @@
 services:
   - type: web
-    name: robo-ofertas-pro
-    env: python
+    name: robo-ofertas-app
+    runtime: python
+    plan: free
 
     buildCommand: |
+      pip install --upgrade pip
       pip install -r requirements.txt
 
-    startCommand: |
-      gunicorn wsgi:app
+    startCommand: gunicorn app:app --workers 2 --threads 4 --timeout 120 --keep-alive 5
+
+    healthCheckPath: /health
 
     autoDeploy: true
+
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.3"
+
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+
+      - key: ML_CLIENT_ID
+        sync: false
+
+      - key: ML_CLIENT_SECRET
+        sync: false
+
+      - key: ML_REDIRECT_URI
+        sync: false
+
+      - key: PORT
+        value: "10000"
+
+      - key: APP_ENV
+        value: "production"
+
+      - key: API_VERSION
+        value: "v1"
