@@ -69,10 +69,14 @@ class Config:
         "https://api.mercadolibre.com"
     )
 
+    API_BASE = ML_API_BASE
+
     ML_SITE_ID = os.getenv(
         "ML_SITE_ID",
         "MLB"
     )
+
+    SITE_ID = ML_SITE_ID
 
     # =========================================================
     # CATEGORIAS
@@ -169,7 +173,7 @@ class Config:
     )
 
     # =========================================================
-    # WHATSAPP CLOUD API
+    # WHATSAPP
     # =========================================================
 
     WHATSAPP_ACCESS_TOKEN = os.getenv(
@@ -223,7 +227,7 @@ class Config:
     )
 
     # =========================================================
-    # CONFIGURAÇÃO DE SESSÃO
+    # SESSÃO
     # =========================================================
 
     SESSION_COOKIE_HTTPONLY = True
@@ -247,7 +251,7 @@ class Config:
     )
 
     # =========================================================
-    # MÉTODOS AUXILIARES
+    # MÉTODOS
     # =========================================================
 
     @classmethod
@@ -304,3 +308,11 @@ class Config:
 # =============================================================
 
 config = Config()
+
+
+# =============================================================
+# COMPATIBILIDADE COM O APP.PY
+# =============================================================
+
+def get_config():
+    return Config
