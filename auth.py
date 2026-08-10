@@ -1,15 +1,5 @@
 """
-Autenticação e integração OAuth do Mercado Livre.
-
-Responsabilidades:
-- iniciar OAuth;
-- PKCE;
-- validar state;
-- receber callback;
-- trocar authorization code por token;
-- salvar token na sessão;
-- informar status;
-- desconectar.
+Autenticação e integração OAuth com Mercado Livre.
 """
 
 from __future__ import annotations
@@ -33,14 +23,7 @@ from flask import (
 from config import get_config
 
 
-logger = logging.getLogger(
-    "robo-ofertas.auth"
-)
-
-
-# ============================================================
-# CONFIGURAÇÃO
-# ============================================================
+logger = logging.getLogger("robo-ofertas.auth")
 
 Config = get_config()
 
@@ -49,92 +32,60 @@ Config = get_config()
 # BLUEPRINT
 # ============================================================
 
-routes = Blueprint(
+auth_routes = Blueprint(
     "auth",
     __name__,
 )
 
 
 # ============================================================
-# VERIFICAÇÃO DE CONFIGURAÇÃO
-# ============================================================
-
-def mercado_livre_configurado() -> bool:
-    """
-    Compatibilidade com qualquer versão do config.py.
-
-    Aceita:
-        mercado_livre_configured()
-    ou:
-        mercado_livre_configurado()
-    """
-
-    metodo_ingles = getattr(
-        Config,
-        "mercado_livre_configured",
-        None,
-    )
-
-    if callable(metodo_ingles):
-        return bool(
-            metodo_ingles()
-        )
-
-    metodo_portugues = getattr(
-        Config,
-        "mercado_livre_configurado",
-        None,
-    )
-
-    if callable(metodo_portugues):
-        return bool(
-            metodo_portugues()
-        )
-
-    return bool(
-        getattr(
-            Config,
-            "ML_CLIENT_ID",
-            "",
-        )
-        and getattr(
-            Config,
-            "ML_CLIENT_SECRET",
-            "",
-        )
-        and getattr(
-            Config,
-            "ML_REDIRECT_URI",
-            "",
-        )
-    )
-
-
-# ============================================================
 # PKCE
 # ============================================================
 
-def generate_code_verifier() -> str:
-
-    return secrets.token_urlsafe(
-        64
-    )[:128]
+def generate_code_verifier():
+    return secrets.token_urlsafe(64)[:128]
 
 
-def generate_code_challenge(
-    verifier: str,
-) -> str:
-
+def generate_code_challenge(verifier):
     digest = hashlib.sha256(
         verifier.encode("utf-8")
     ).digest()
 
     return (
-        base64.urlsafe_b64encode(
-            digest
-        )
+        base64.urlsafe_b64encode(digest)
         .decode("utf-8")
         .rstrip("=")
+    )
+
+
+# ============================================================
+# CONFIGURAÇÃO
+# ============================================================
+
+def mercado_livre_configurado():
+    """
+    Compatibilidade com diferentes versões do Config.
+    """
+
+    try:
+        metodo = getattr(
+            Config,
+            "mercado_livre_configurado",
+            None
+        )
+
+        if callable(metodo):
+            return bool(metodo())
+
+    except Exception:
+        logger.exception(
+            "Erro verificando configuração do Mercado Livre."
+        )
+
+    return bool(
+        getattr(Config, "ML_CLIENT_ID", None)
+        and getattr(Config, "ML_CLIENT_SECRET", None)
+        and getattr(Config, "ML_REDIRECT_URI", None)
     )
 
 
@@ -142,9 +93,9 @@ def generate_code_challenge(
 # STATUS
 # ============================================================
 
-@routes.route(
+@auth_routes.route(
     "/api/auth/status",
-    methods=["GET"],
+    methods=["GET"]
 )
 def auth_status():
 
@@ -152,54 +103,36 @@ def auth_status():
         "access_token"
     )
 
-    conectado = bool(
-        access_token
-    )
+    configurado = mercado_livre_configurado()
 
     return jsonify({
-
         "sucesso": True,
-
-        "conectado":
-            conectado,
-
+        "conectado": bool(access_token),
         "mercado_livre": {
-
-            "configurado":
-                mercado_livre_configurado(),
-
-            "conectado":
-                conectado,
-
-            "site_id":
-                getattr(
-                    Config,
-                    "ML_SITE_ID",
-                    "MLB",
-                ),
-
-        },
-
+            "configurado": configurado,
+            "conectado": bool(access_token),
+            "site_id": getattr(
+                Config,
+                "ML_SITE_ID",
+                "MLB"
+            )
+        }
     })
 
 
 # ============================================================
-# INICIAR OAUTH
+# INICIAR AUTENTICAÇÃO
 # ============================================================
 
-@routes.route(
+@auth_routes.route(
     "/auth/mercadolivre",
-    methods=["GET"],
+    methods=["GET"]
 )
-@routes.route(
+@auth_routes.route(
     "/auth/mercadolivre/connect",
-    methods=["GET"],
+    methods=["GET"]
 )
 def conectar_mercado_livre():
-
-    logger.info(
-        "Iniciando autenticação Mercado Livre."
-    )
 
     if not mercado_livre_configurado():
 
@@ -208,37 +141,24 @@ def conectar_mercado_livre():
         )
 
         return jsonify({
-
             "sucesso": False,
-
-            "erro":
-                "mercado_livre_nao_configurado",
-
+            "erro": "mercado_livre_nao_configurado",
             "mensagem": (
                 "Configure ML_CLIENT_ID, "
                 "ML_CLIENT_SECRET e "
                 "ML_REDIRECT_URI no Render."
-            ),
-
+            )
         }), 503
 
-    state = secrets.token_urlsafe(
-        32
+    state = secrets.token_urlsafe(32)
+
+    verifier = generate_code_verifier()
+
+    challenge = generate_code_challenge(
+        verifier
     )
 
-    verifier = (
-        generate_code_verifier()
-    )
-
-    challenge = (
-        generate_code_challenge(
-            verifier
-        )
-    )
-
-    session[
-        "oauth_state"
-    ] = state
+    session["oauth_state"] = state
 
     session[
         "oauth_code_verifier"
@@ -247,37 +167,28 @@ def conectar_mercado_livre():
     session.modified = True
 
     params = {
-
-        "response_type":
-            "code",
-
-        "client_id":
-            Config.ML_CLIENT_ID,
-
-        "redirect_uri":
-            Config.ML_REDIRECT_URI,
-
-        "state":
-            state,
-
-        "code_challenge":
-            challenge,
-
-        "code_challenge_method":
-            "S256",
-
+        "response_type": "code",
+        "client_id": Config.ML_CLIENT_ID,
+        "redirect_uri": Config.ML_REDIRECT_URI,
+        "state": state,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
     }
 
     auth_url = getattr(
         Config,
         "ML_AUTH_URL",
-        "https://auth.mercadolivre.com.br/authorization",
+        "https://auth.mercadolivre.com.br/authorization"
     )
 
     authorization_url = (
         auth_url
         + "?"
         + urlencode(params)
+    )
+
+    logger.info(
+        "Iniciando autenticação Mercado Livre."
     )
 
     return redirect(
@@ -289,23 +200,19 @@ def conectar_mercado_livre():
 # CALLBACK
 # ============================================================
 
-@routes.route(
+@auth_routes.route(
     "/callback",
-    methods=["GET"],
+    methods=["GET"]
 )
-@routes.route(
+@auth_routes.route(
     "/auth/callback",
-    methods=["GET"],
+    methods=["GET"]
 )
-@routes.route(
+@auth_routes.route(
     "/auth/mercadolivre/callback",
-    methods=["GET"],
+    methods=["GET"]
 )
 def mercado_livre_callback():
-
-    logger.info(
-        "Callback Mercado Livre recebido."
-    )
 
     error = request.args.get(
         "error"
@@ -315,30 +222,26 @@ def mercado_livre_callback():
 
         description = request.args.get(
             "error_description",
-            "",
+            ""
         )
 
         session.pop(
             "oauth_state",
-            None,
+            None
         )
 
         session.pop(
             "oauth_code_verifier",
-            None,
+            None
         )
 
         return jsonify({
-
             "sucesso": False,
-
-            "erro":
-                error,
-
-            "mensagem":
+            "erro": error,
+            "mensagem": (
                 description
-                or "Autorização cancelada.",
-
+                or "Autorização cancelada."
+            )
         }), 400
 
     code = request.args.get(
@@ -352,17 +255,12 @@ def mercado_livre_callback():
     if not code:
 
         return jsonify({
-
             "sucesso": False,
-
-            "erro":
-                "authorization_code_ausente",
-
+            "erro": "authorization_code_ausente",
             "mensagem": (
                 "O Mercado Livre não enviou "
                 "o código de autorização."
-            ),
-
+            )
         }), 400
 
     saved_state = session.get(
@@ -374,7 +272,7 @@ def mercado_livre_callback():
         or not state
         or not secrets.compare_digest(
             str(saved_state),
-            str(state),
+            str(state)
         )
     ):
 
@@ -383,17 +281,12 @@ def mercado_livre_callback():
         )
 
         return jsonify({
-
             "sucesso": False,
-
-            "erro":
-                "state_invalido",
-
+            "erro": "state_invalido",
             "mensagem": (
                 "A validação de segurança "
                 "da autorização falhou."
-            ),
-
+            )
         }), 400
 
     verifier = session.get(
@@ -403,85 +296,54 @@ def mercado_livre_callback():
     if not verifier:
 
         return jsonify({
-
             "sucesso": False,
-
-            "erro":
-                "code_verifier_ausente",
-
+            "erro": "code_verifier_ausente",
             "mensagem": (
                 "O code_verifier OAuth "
                 "não foi encontrado."
-            ),
-
+            )
         }), 400
 
     token_url = getattr(
         Config,
         "ML_OAUTH_TOKEN_URL",
-        "https://api.mercadolibre.com/oauth/token",
+        "https://api.mercadolibre.com/oauth/token"
     )
 
     token_data = {
-
-        "grant_type":
-            "authorization_code",
-
-        "client_id":
-            Config.ML_CLIENT_ID,
-
-        "client_secret":
-            Config.ML_CLIENT_SECRET,
-
-        "code":
-            code,
-
-        "redirect_uri":
-            Config.ML_REDIRECT_URI,
-
-        "code_verifier":
-            verifier,
-
+        "grant_type": "authorization_code",
+        "client_id": Config.ML_CLIENT_ID,
+        "client_secret": Config.ML_CLIENT_SECRET,
+        "code": code,
+        "redirect_uri": Config.ML_REDIRECT_URI,
+        "code_verifier": verifier,
     }
 
     try:
 
         response = requests.post(
-
             token_url,
-
             data=token_data,
-
             headers={
-
-                "Accept":
-                    "application/json",
-
-                "User-Agent":
-                    getattr(
-                        Config,
-                        "ML_USER_AGENT",
-                        "Robo-Ofertas-ML/10.0",
-                    ),
-
+                "Accept": "application/json",
+                "User-Agent": getattr(
+                    Config,
+                    "ML_USER_AGENT",
+                    "Robo-Ofertas-ML/10.0"
+                )
             },
-
             timeout=(
-
                 getattr(
                     Config,
                     "ML_CONNECT_TIMEOUT",
-                    10,
+                    10
                 ),
-
                 getattr(
                     Config,
                     "ML_READ_TIMEOUT",
-                    30,
-                ),
-
-            ),
-
+                    30
+                )
+            )
         )
 
     except requests.RequestException as exc:
@@ -491,20 +353,13 @@ def mercado_livre_callback():
         )
 
         return jsonify({
-
             "sucesso": False,
-
-            "erro":
-                "mercado_livre_indisponivel",
-
+            "erro": "mercado_livre_indisponivel",
             "mensagem": (
                 "Não foi possível comunicar "
                 "com o Mercado Livre."
             ),
-
-            "detalhe":
-                str(exc),
-
+            "detalhe": str(exc)
         }), 502
 
     try:
@@ -514,32 +369,21 @@ def mercado_livre_callback():
     except ValueError:
 
         payload = {
-            "resposta":
-                response.text
+            "resposta": response.text
         }
 
     if not response.ok:
 
         logger.error(
-            "Falha no OAuth Mercado Livre: "
-            "status=%s resposta=%s",
-            response.status_code,
-            payload,
+            "Erro OAuth Mercado Livre: %s",
+            payload
         )
 
         return jsonify({
-
             "sucesso": False,
-
-            "erro":
-                "oauth_token_error",
-
-            "status":
-                response.status_code,
-
-            "resposta":
-                payload,
-
+            "erro": "oauth_token_error",
+            "status": response.status_code,
+            "resposta": payload
         }), 400
 
     access_token = payload.get(
@@ -549,26 +393,19 @@ def mercado_livre_callback():
     if not access_token:
 
         return jsonify({
-
             "sucesso": False,
-
-            "erro":
-                "access_token_ausente",
-
+            "erro": "access_token_ausente",
             "mensagem": (
                 "O Mercado Livre não retornou "
                 "um access_token."
-            ),
-
+            )
         }), 502
 
     # ========================================================
     # SALVAR SESSÃO
     # ========================================================
 
-    session[
-        "access_token"
-    ] = access_token
+    session["access_token"] = access_token
 
     refresh_token = payload.get(
         "refresh_token"
@@ -580,25 +417,17 @@ def mercado_livre_callback():
             "refresh_token"
         ] = refresh_token
 
-    user_id = payload.get(
-        "user_id"
-    )
-
-    if user_id is not None:
+    if payload.get("user_id") is not None:
 
         session[
             "user_id"
-        ] = user_id
+        ] = payload.get("user_id")
 
-    expires_in = payload.get(
-        "expires_in"
-    )
-
-    if expires_in is not None:
+    if payload.get("expires_in") is not None:
 
         session[
             "expires_in"
-        ] = expires_in
+        ] = payload.get("expires_in")
 
     session[
         "mercado_livre_connected"
@@ -606,12 +435,12 @@ def mercado_livre_callback():
 
     session.pop(
         "oauth_state",
-        None,
+        None
     )
 
     session.pop(
         "oauth_code_verifier",
-        None,
+        None
     )
 
     session.modified = True
@@ -629,75 +458,59 @@ def mercado_livre_callback():
 # LOGOUT
 # ============================================================
 
-@routes.route(
+@auth_routes.route(
     "/auth/mercadolivre/logout",
-    methods=["GET"],
+    methods=["GET"]
 )
-@routes.route(
+@auth_routes.route(
     "/api/auth/logout",
-    methods=["GET", "POST"],
+    methods=["GET", "POST"]
 )
 def desconectar_mercado_livre():
 
     session.pop(
         "access_token",
-        None,
+        None
     )
 
     session.pop(
         "refresh_token",
-        None,
+        None
     )
 
     session.pop(
         "user_id",
-        None,
+        None
     )
 
     session.pop(
         "expires_in",
-        None,
+        None
     )
 
     session.pop(
         "mercado_livre_connected",
-        None,
+        None
     )
 
     session.pop(
         "oauth_state",
-        None,
+        None
     )
 
     session.pop(
         "oauth_code_verifier",
-        None,
+        None
     )
 
     session.modified = True
 
-    logger.info(
-        "Mercado Livre desconectado."
-    )
-
-    # Se veio pelo navegador, volta para a página.
-    if request.method == "GET":
-
-        return redirect(
-            "/?mercado_livre=desconectado"
-        )
-
     return jsonify({
-
-        "sucesso":
-            True,
-
-        "conectado":
-            False,
-
-        "mensagem":
-            "Mercado Livre desconectado.",
-
+        "sucesso": True,
+        "conectado": False,
+        "mensagem": (
+            "Mercado Livre desconectado."
+        )
     })
 
 
@@ -705,31 +518,33 @@ def desconectar_mercado_livre():
 # REGISTRO
 # ============================================================
 
-def register_auth_routes(
-    app,
-):
+def register_auth_routes(app):
+
+    """
+    Registra o Blueprint de autenticação somente uma vez.
+    """
 
     if "auth" in app.blueprints:
 
-        logger.info(
+        logger.warning(
             "Blueprint auth já registrado. "
-            "Não registrando novamente."
+            "Ignorando novo registro."
         )
 
         return app
 
     app.register_blueprint(
-        routes
+        auth_routes
     )
 
     logger.info(
-        "Rotas de autenticação carregadas."
+        "Blueprint autenticação Mercado Livre registrado."
     )
 
     return app
 
 
 __all__ = [
-    "routes",
+    "auth_routes",
     "register_auth_routes",
 ]
