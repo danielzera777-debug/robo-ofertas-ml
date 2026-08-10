@@ -1,47 +1,62 @@
 """
-Rotas de autenticação e integração do Mercado Livre.
+Rotas principais do Robo Ofertas PRO.
 
-Este módulo é compatível com o app.py e com o Config atual.
+Este arquivo concentra:
+- status da aplicação;
+- autenticação Mercado Livre;
+- busca de produtos;
+- ofertas;
+- posts;
+- imagens;
+- WhatsApp;
+- publicações;
+- configurações;
+- diagnóstico.
 
-Responsabilidades:
-- iniciar OAuth do Mercado Livre;
-- receber callback;
-- trocar authorization code por access token;
-- armazenar token na sessão;
-- informar status da conexão;
-- desconectar a sessão;
+Compatível com o app.py e com o config.py atual.
 """
 
 from __future__ import annotations
 
-import hashlib
-import base64
 import logging
-import secrets
-from urllib.parse import urlencode
-
-import requests
 
 from flask import (
     Blueprint,
     jsonify,
-    redirect,
     request,
     session,
 )
 
 from config import get_config
+from database import db
 
-
-LOGGER_NAME = "robo-ofertas.auth"
-
-logger = logging.getLogger(
-    LOGGER_NAME
+from services.affiliate_service import (
+    AffiliateService,
 )
 
-routes = Blueprint(
-    "auth",
-    __name__,
+from services.offer_service import (
+    OfferService,
+)
+
+from services.post_service import (
+    PostService,
+)
+
+from services.image_service import (
+    ImageService,
+)
+
+from services.whatsapp_service import (
+    WhatsAppService,
+)
+
+
+# ============================================================
+# LOG
+# ============================================================
+
+logger = logging.getLogger(
+    "robo-ofertas.routes"
 )
 
 
@@ -53,45 +68,265 @@ Config = get_config()
 
 
 # ============================================================
-# PKCE
+# BLUEPRINT
 # ============================================================
 
-def generate_code_verifier() -> str:
-    """
-    Gera um code_verifier seguro para OAuth PKCE.
-    """
-
-    return secrets.token_urlsafe(
-        64
-    )[:128]
+routes = Blueprint(
+    "routes",
+    __name__,
+)
 
 
-def generate_code_challenge(
-    verifier: str,
-) -> str:
-    """
-    Gera o code_challenge S256.
-    """
+# ============================================================
+# SERVIÇOS
+# ============================================================
 
-    digest = hashlib.sha256(
-        verifier.encode(
-            "utf-8"
+affiliate_service = (
+    AffiliateService()
+)
+
+offer_service = (
+    OfferService()
+)
+
+post_service = (
+    PostService()
+)
+
+image_service = (
+    ImageService()
+)
+
+whatsapp_service = (
+    WhatsAppService()
+)
+
+
+# ============================================================
+# FUNÇÕES AUXILIARES
+# ============================================================
+
+def resposta_erro(
+    mensagem,
+    status=400,
+    **extra,
+):
+
+    resposta = {
+        "sucesso": False,
+        "erro": mensagem,
+    }
+
+    resposta.update(
+        extra
+    )
+
+    return jsonify(
+        resposta
+    ), status
+
+
+def numero(
+    valor,
+    padrao=0,
+):
+
+    try:
+
+        return float(
+            valor
         )
-    ).digest()
+
+    except (
+        ValueError,
+        TypeError,
+    ):
+
+        return float(
+            padrao
+        )
+
+
+def inteiro(
+    valor,
+    padrao=0,
+):
+
+    try:
+
+        return int(
+            valor
+        )
+
+    except (
+        ValueError,
+        TypeError,
+    ):
+
+        return int(
+            padrao
+        )
+
+
+def mercado_livre_configurado():
+    """
+    Compatibilidade com diferentes versões do config.py.
+
+    Primeiro tenta o método em inglês.
+    Depois tenta o método em português.
+    Por último verifica as variáveis diretamente.
+    """
+
+    metodo = getattr(
+        Config,
+        "mercado_livre_configured",
+        None,
+    )
+
+    if callable(metodo):
+
+        try:
+
+            return bool(
+                metodo()
+            )
+
+        except Exception:
+
+            logger.exception(
+                "Erro verificando configuração do Mercado Livre."
+            )
+
+    metodo = getattr(
+        Config,
+        "mercado_livre_configurado",
+        None,
+    )
+
+    if callable(metodo):
+
+        try:
+
+            return bool(
+                metodo()
+            )
+
+        except Exception:
+
+            logger.exception(
+                "Erro verificando configuração do Mercado Livre."
+            )
+
+    return bool(
+
+        getattr(
+            Config,
+            "ML_CLIENT_ID",
+            "",
+        )
+
+        and
+
+        getattr(
+            Config,
+            "ML_CLIENT_SECRET",
+            "",
+        )
+
+        and
+
+        getattr(
+            Config,
+            "ML_REDIRECT_URI",
+            "",
+        )
+
+    )
+
+
+def token_mercado_livre():
 
     return (
-        base64.urlsafe_b64encode(
-            digest
+        session.get(
+            "access_token"
         )
-        .decode(
-            "utf-8"
+        or getattr(
+            Config,
+            "ML_ACCESS_TOKEN",
+            "",
         )
-        .rstrip("=")
     )
 
 
 # ============================================================
-# STATUS
+# PÁGINA INICIAL / STATUS
+# ============================================================
+
+@routes.route(
+    "/api/status",
+    methods=["GET"],
+)
+def status():
+
+    try:
+
+        estatisticas = (
+            db.estatisticas()
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Erro obtendo estatísticas."
+        )
+
+        estatisticas = {}
+
+    return jsonify({
+
+        "sucesso":
+            True,
+
+        "app":
+            getattr(
+                Config,
+                "APP_NAME",
+                "Robo Ofertas PRO",
+            ),
+
+        "versao":
+            getattr(
+                Config,
+                "APP_VERSION",
+                "10.0.0",
+            ),
+
+        "mercado_livre":
+            bool(
+                token_mercado_livre()
+            ),
+
+        "mercado_livre_configurado":
+            mercado_livre_configurado(),
+
+        "whatsapp":
+            whatsapp_service.configurado(),
+
+        "agendamento":
+            getattr(
+                Config,
+                "INTERVALO_OFERTAS",
+                0,
+            ),
+
+        "database":
+            estatisticas,
+
+    })
+
+
+# ============================================================
+# STATUS DA AUTENTICAÇÃO
 # ============================================================
 
 @routes.route(
@@ -99,456 +334,912 @@ def generate_code_challenge(
     methods=["GET"],
 )
 def auth_status():
-    """
-    Retorna o estado atual da conexão.
-    """
 
-    access_token = session.get(
-        "access_token"
-    )
-
-    return jsonify(
-        sucesso=True,
-        conectado=bool(
-            access_token
-        ),
-        mercado_livre={
-            "configurado": (
-                Config.mercado_livre_configured()
-            ),
-            "conectado": bool(
-                access_token
-            ),
-            "site_id": Config.ML_SITE_ID,
-        },
-    )
-
-
-# ============================================================
-# INICIAR OAUTH
-# ============================================================
-
-@routes.route(
-    "/auth/mercadolivre",
-    methods=["GET"],
-)
-@routes.route(
-    "/auth/mercadolivre/connect",
-    methods=["GET"],
-)
-def conectar_mercado_livre():
-    """
-    Inicia o fluxo OAuth do Mercado Livre.
-    """
-
-    if not Config.mercado_livre_configured():
-
-        logger.error(
-            "Mercado Livre não configurado."
+    token = (
+        session.get(
+            "access_token"
         )
-
-        return jsonify(
-            sucesso=False,
-            erro="mercado_livre_nao_configurado",
-            mensagem=(
-                "Configure ML_CLIENT_ID, "
-                "ML_CLIENT_SECRET e "
-                "ML_REDIRECT_URI no Render."
-            ),
-        ), 503
-
-    state = secrets.token_urlsafe(
-        32
-    )
-
-    verifier = generate_code_verifier()
-
-    challenge = generate_code_challenge(
-        verifier
-    )
-
-    session[
-        "oauth_state"
-    ] = state
-
-    session[
-        "oauth_code_verifier"
-    ] = verifier
-
-    session.modified = True
-
-    params = {
-        "response_type": "code",
-        "client_id": Config.ML_CLIENT_ID,
-        "redirect_uri": Config.ML_REDIRECT_URI,
-        "state": state,
-        "code_challenge": challenge,
-        "code_challenge_method": "S256",
-    }
-
-    authorization_url = (
-        Config.ML_AUTH_URL
-        + "?"
-        + urlencode(
-            params
-        )
-    )
-
-    return redirect(
-        authorization_url
-    )
-
-
-# ============================================================
-# CALLBACK
-# ============================================================
-
-@routes.route(
-    "/auth/callback",
-    methods=["GET"],
-)
-@routes.route(
-    "/auth/mercadolivre/callback",
-    methods=["GET"],
-)
-def mercado_livre_callback():
-    """
-    Recebe o retorno do Mercado Livre.
-    """
-
-    error = request.args.get(
-        "error"
-    )
-
-    if error:
-
-        description = request.args.get(
-            "error_description",
+        or getattr(
+            Config,
+            "ML_ACCESS_TOKEN",
             "",
         )
-
-        session.pop(
-            "oauth_state",
-            None,
-        )
-
-        session.pop(
-            "oauth_code_verifier",
-            None,
-        )
-
-        return jsonify(
-            sucesso=False,
-            erro=error,
-            mensagem=description
-            or "Autorização cancelada.",
-        ), 400
-
-    code = request.args.get(
-        "code"
     )
 
-    state = request.args.get(
-        "state"
+    return jsonify({
+
+        "sucesso":
+            True,
+
+        "conectado":
+            bool(token),
+
+        "mercado_livre": {
+
+            "configurado":
+                mercado_livre_configurado(),
+
+            "conectado":
+                bool(token),
+
+            "site_id":
+                getattr(
+                    Config,
+                    "ML_SITE_ID",
+                    "MLB",
+                ),
+
+        },
+
+    })
+
+
+# ============================================================
+# OFERTAS SALVAS
+# ============================================================
+
+@routes.route(
+    "/api/ofertas",
+    methods=["GET"],
+)
+def ofertas():
+
+    limite = inteiro(
+        request.args.get(
+            "limite",
+            50,
+        ),
+        50,
     )
 
-    if not code:
-
-        return jsonify(
-            sucesso=False,
-            erro="authorization_code_ausente",
-            mensagem=(
-                "O Mercado Livre não enviou "
-                "o código de autorização."
-            ),
-        ), 400
-
-    saved_state = session.get(
-        "oauth_state"
+    limite = max(
+        1,
+        min(
+            limite,
+            500,
+        ),
     )
 
-    if (
-        not saved_state
-        or not state
-        or not secrets.compare_digest(
-            str(saved_state),
-            str(state),
+    status_filtro = (
+        request.args.get(
+            "status"
         )
-    ):
-
-        logger.warning(
-            "State OAuth inválido."
-        )
-
-        return jsonify(
-            sucesso=False,
-            erro="state_invalido",
-            mensagem=(
-                "A validação de segurança "
-                "da autorização falhou."
-            ),
-        ), 400
-
-    verifier = session.get(
-        "oauth_code_verifier"
     )
-
-    if not verifier:
-
-        return jsonify(
-            sucesso=False,
-            erro="code_verifier_ausente",
-            mensagem=(
-                "O code_verifier OAuth "
-                "não foi encontrado."
-            ),
-        ), 400
-
-    token_data = {
-        "grant_type": "authorization_code",
-        "client_id": Config.ML_CLIENT_ID,
-        "client_secret": Config.ML_CLIENT_SECRET,
-        "code": code,
-        "redirect_uri": Config.ML_REDIRECT_URI,
-        "code_verifier": verifier,
-    }
 
     try:
 
-        response = requests.post(
-            Config.ML_OAUTH_TOKEN_URL,
-            data=token_data,
-            headers={
-                "Accept": "application/json",
-                "User-Agent": Config.ML_USER_AGENT,
-            },
-            timeout=(
-                Config.ML_CONNECT_TIMEOUT,
-                Config.ML_READ_TIMEOUT,
-            ),
+        dados = db.buscar_ofertas(
+            limite=limite,
+            status=status_filtro,
         )
 
-    except requests.RequestException as exc:
+    except Exception as exc:
 
         logger.exception(
-            "Erro comunicando com Mercado Livre."
+            "Erro buscando ofertas."
         )
 
-        return jsonify(
-            sucesso=False,
-            erro="mercado_livre_indisponivel",
-            mensagem=(
-                "Não foi possível comunicar "
-                "com o Mercado Livre."
-            ),
+        return resposta_erro(
+            "Erro ao buscar ofertas.",
+            500,
             detalhe=str(exc),
-        ), 502
+        )
 
-    if not response.ok:
+    return jsonify({
+
+        "sucesso":
+            True,
+
+        "total":
+            len(dados),
+
+        "ofertas":
+            dados,
+
+    })
+
+
+# ============================================================
+# SALVAR OFERTA
+# ============================================================
+
+@routes.route(
+    "/api/ofertas",
+    methods=["POST"],
+)
+def salvar_oferta():
+
+    dados = request.get_json(
+        silent=True
+    )
+
+    if not isinstance(
+        dados,
+        dict,
+    ):
+
+        return resposta_erro(
+            "Dados inválidos."
+        )
+
+    oferta = (
+        dados.get(
+            "oferta"
+        )
+        or dados
+    )
+
+    try:
+
+        oferta_id = (
+            db.salvar_oferta(
+                oferta
+            )
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "Erro salvando oferta."
+        )
+
+        return resposta_erro(
+            "Erro ao salvar oferta.",
+            500,
+            detalhe=str(exc),
+        )
+
+    if not oferta_id:
+
+        return resposta_erro(
+            "Não foi possível salvar a oferta."
+        )
+
+    return jsonify({
+
+        "sucesso":
+            True,
+
+        "id":
+            oferta_id,
+
+    })
+
+
+# ============================================================
+# PREPARAR OFERTAS
+# ============================================================
+
+@routes.route(
+    "/api/ofertas/preparar",
+    methods=["POST"],
+)
+def preparar_ofertas():
+
+    dados = request.get_json(
+        silent=True
+    )
+
+    if not isinstance(
+        dados,
+        dict,
+    ):
+
+        return resposta_erro(
+            "Dados inválidos."
+        )
+
+    produtos = dados.get(
+        "produtos",
+        [],
+    )
+
+    margem = numero(
+        dados.get(
+            "margem",
+            getattr(
+                Config,
+                "MARGEM_PADRAO",
+                10,
+            ),
+        ),
+        getattr(
+            Config,
+            "MARGEM_PADRAO",
+            10,
+        ),
+    )
+
+    lucro_minimo = numero(
+        dados.get(
+            "lucro_minimo",
+            getattr(
+                Config,
+                "LUCRO_MINIMO_PADRAO",
+                20,
+            ),
+        ),
+        getattr(
+            Config,
+            "LUCRO_MINIMO_PADRAO",
+            20,
+        ),
+    )
+
+    desconto_minimo = numero(
+        dados.get(
+            "desconto_minimo",
+            getattr(
+                Config,
+                "DESCONTO_MINIMO_PADRAO",
+                0,
+            ),
+        ),
+        getattr(
+            Config,
+            "DESCONTO_MINIMO_PADRAO",
+            0,
+        ),
+    )
+
+    limite = inteiro(
+        dados.get(
+            "limite",
+            getattr(
+                Config,
+                "LIMITE_OFERTAS",
+                50,
+            ),
+        ),
+        getattr(
+            Config,
+            "LIMITE_OFERTAS",
+            50,
+        ),
+    )
+
+    limite = max(
+        1,
+        min(
+            limite,
+            500,
+        ),
+    )
+
+    try:
+
+        ofertas = (
+            affiliate_service
+            .melhores_ofertas(
+                produtos=produtos,
+                limite=limite,
+                margem=margem,
+                lucro_minimo=lucro_minimo,
+                desconto_minimo=desconto_minimo,
+            )
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "Erro preparando ofertas."
+        )
+
+        return resposta_erro(
+            "Erro ao preparar ofertas.",
+            500,
+            detalhe=str(exc),
+        )
+
+    return jsonify({
+
+        "sucesso":
+            True,
+
+        "total":
+            len(ofertas),
+
+        "ofertas":
+            ofertas,
+
+    })
+
+
+# ============================================================
+# GERAR POST
+# ============================================================
+
+@routes.route(
+    "/api/post",
+    methods=["POST"],
+)
+def gerar_post():
+
+    dados = request.get_json(
+        silent=True
+    )
+
+    if not isinstance(
+        dados,
+        dict,
+    ):
+
+        return resposta_erro(
+            "Dados inválidos."
+        )
+
+    oferta = (
+        dados.get(
+            "oferta"
+        )
+        or dados
+    )
+
+    try:
+
+        post = (
+            post_service
+            .criar_post(
+                oferta
+            )
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "Erro gerando post."
+        )
+
+        return resposta_erro(
+            "Erro ao gerar post.",
+            500,
+            detalhe=str(exc),
+        )
+
+    if not post:
+
+        return resposta_erro(
+            "Não foi possível gerar o post."
+        )
+
+    return jsonify({
+
+        "sucesso":
+            True,
+
+        "post":
+            post,
+
+    })
+
+
+# ============================================================
+# GERAR IMAGEM
+# ============================================================
+
+@routes.route(
+    "/api/imagem",
+    methods=["POST"],
+)
+def gerar_imagem():
+
+    dados = request.get_json(
+        silent=True
+    )
+
+    if not isinstance(
+        dados,
+        dict,
+    ):
+
+        return resposta_erro(
+            "Dados inválidos."
+        )
+
+    oferta = (
+        dados.get(
+            "oferta"
+        )
+        or dados
+    )
+
+    try:
+
+        caminho = (
+            image_service
+            .criar_imagem(
+                oferta
+            )
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "Erro gerando imagem."
+        )
+
+        return resposta_erro(
+            "Erro ao gerar imagem.",
+            500,
+            detalhe=str(exc),
+        )
+
+    if not caminho:
+
+        return resposta_erro(
+            "Não foi possível gerar a imagem."
+        )
+
+    return jsonify({
+
+        "sucesso":
+            True,
+
+        "arquivo":
+            caminho,
+
+    })
+
+
+# ============================================================
+# WHATSAPP STATUS
+# ============================================================
+
+@routes.route(
+    "/api/whatsapp/status",
+    methods=["GET"],
+)
+def whatsapp_status():
+
+    try:
+
+        resultado = (
+            whatsapp_service
+            .testar_conexao()
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "Erro verificando WhatsApp."
+        )
+
+        return resposta_erro(
+            "Erro verificando WhatsApp.",
+            500,
+            detalhe=str(exc),
+        )
+
+    return jsonify(
+        resultado
+    )
+
+
+# ============================================================
+# WHATSAPP ENVIAR
+# ============================================================
+
+@routes.route(
+    "/api/whatsapp/enviar",
+    methods=["POST"],
+)
+def whatsapp_enviar():
+
+    dados = request.get_json(
+        silent=True
+    )
+
+    if not isinstance(
+        dados,
+        dict,
+    ):
+
+        return resposta_erro(
+            "Dados inválidos."
+        )
+
+    numero_destino = (
+
+        dados.get(
+            "numero"
+        )
+
+        or
+
+        dados.get(
+            "destinatario"
+        )
+
+    )
+
+    oferta = dados.get(
+        "oferta"
+    )
+
+    try:
+
+        if oferta:
+
+            resultado = (
+                whatsapp_service
+                .enviar_oferta(
+                    numero=numero_destino,
+                    oferta=oferta,
+                )
+            )
+
+        else:
+
+            mensagem = (
+                dados.get(
+                    "mensagem"
+                )
+            )
+
+            if not mensagem:
+
+                return resposta_erro(
+                    "Informe a mensagem ou a oferta."
+                )
+
+            resultado = (
+                whatsapp_service
+                .enviar_texto(
+                    numero=numero_destino,
+                    mensagem=mensagem,
+                )
+            )
+
+    except Exception as exc:
+
+        logger.exception(
+            "Erro enviando WhatsApp."
+        )
+
+        return resposta_erro(
+            "Erro ao enviar WhatsApp.",
+            500,
+            detalhe=str(exc),
+        )
+
+    return jsonify(
+        resultado
+    )
+
+
+# ============================================================
+# PUBLICAÇÕES
+# ============================================================
+
+@routes.route(
+    "/api/publicacoes",
+    methods=["GET"],
+)
+def publicacoes():
+
+    limite = inteiro(
+        request.args.get(
+            "limite",
+            100,
+        ),
+        100,
+    )
+
+    limite = max(
+        1,
+        min(
+            limite,
+            500,
+        ),
+    )
+
+    try:
+
+        dados = (
+            db.buscar_publicacoes(
+                limite=limite
+            )
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "Erro buscando publicações."
+        )
+
+        return resposta_erro(
+            "Erro ao buscar publicações.",
+            500,
+            detalhe=str(exc),
+        )
+
+    return jsonify({
+
+        "sucesso":
+            True,
+
+        "total":
+            len(dados),
+
+        "publicacoes":
+            dados,
+
+    })
+
+
+# ============================================================
+# CONFIGURAÇÕES
+# ============================================================
+
+@routes.route(
+    "/api/config",
+    methods=["GET"],
+)
+def obter_config():
+
+    return jsonify({
+
+        "sucesso":
+            True,
+
+        "config": {
+
+            "app_name":
+                getattr(
+                    Config,
+                    "APP_NAME",
+                    "Robo Ofertas PRO",
+                ),
+
+            "site_id":
+                getattr(
+                    Config,
+                    "ML_SITE_ID",
+                    "MLB",
+                ),
+
+            "margem_padrao":
+                getattr(
+                    Config,
+                    "MARGEM_PADRAO",
+                    10,
+                ),
+
+            "lucro_minimo":
+                getattr(
+                    Config,
+                    "LUCRO_MINIMO_PADRAO",
+                    20,
+                ),
+
+            "desconto_minimo":
+                getattr(
+                    Config,
+                    "DESCONTO_MINIMO_PADRAO",
+                    0,
+                ),
+
+            "limite_ofertas":
+                getattr(
+                    Config,
+                    "LIMITE_OFERTAS",
+                    50,
+                ),
+
+            "intervalo":
+                getattr(
+                    Config,
+                    "INTERVALO_OFERTAS",
+                    0,
+                ),
+
+        },
+
+    })
+
+
+# ============================================================
+# SALVAR CONFIGURAÇÕES
+# ============================================================
+
+@routes.route(
+    "/api/config",
+    methods=["POST"],
+)
+def salvar_config():
+
+    dados = request.get_json(
+        silent=True
+    )
+
+    if not isinstance(
+        dados,
+        dict,
+    ):
+
+        return resposta_erro(
+            "Dados inválidos."
+        )
+
+    permitidos = {
+
+        "margem_padrao",
+        "lucro_minimo",
+        "desconto_minimo",
+        "limite_ofertas",
+        "intervalo",
+
+    }
+
+    alterados = []
+
+    for chave in permitidos:
+
+        if chave not in dados:
+
+            continue
+
+        valor = dados[
+            chave
+        ]
 
         try:
 
-            payload = response.json()
+            db.salvar_configuracao(
+                chave,
+                valor,
+            )
 
-        except ValueError:
+            alterados.append(
+                chave
+            )
 
-            payload = {
-                "resposta": response.text
-            }
+        except Exception as exc:
 
-        logger.error(
-            "Falha no OAuth Mercado Livre: %s",
-            payload,
-        )
+            logger.exception(
+                "Erro salvando configuração %s.",
+                chave,
+            )
 
-        return jsonify(
-            sucesso=False,
-            erro="oauth_token_error",
-            status=response.status_code,
-            resposta=payload,
-        ), 400
+            return resposta_erro(
+                "Erro ao salvar configuração.",
+                500,
+                detalhe=str(exc),
+            )
+
+    return jsonify({
+
+        "sucesso":
+            True,
+
+        "alterados":
+            alterados,
+
+    })
+
+
+# ============================================================
+# DIAGNÓSTICO
+# ============================================================
+
+@routes.route(
+    "/api/diagnostico",
+    methods=["GET"],
+)
+def diagnostico():
+
+    ml_token = (
+        token_mercado_livre()
+    )
 
     try:
 
-        token = response.json()
-
-    except ValueError:
-
-        return jsonify(
-            sucesso=False,
-            erro="resposta_token_invalida",
-            mensagem=(
-                "O Mercado Livre retornou "
-                "uma resposta inválida."
-            ),
-        ), 502
-
-    access_token = token.get(
-        "access_token"
-    )
-
-    if not access_token:
-
-        return jsonify(
-            sucesso=False,
-            erro="access_token_ausente",
-            mensagem=(
-                "O Mercado Livre não retornou "
-                "um access_token."
-            ),
-        ), 502
-
-    # --------------------------------------------------------
-    # SESSÃO
-    # --------------------------------------------------------
-
-    session[
-        "access_token"
-    ] = access_token
-
-    if token.get(
-        "refresh_token"
-    ):
-
-        session[
-            "refresh_token"
-        ] = token.get(
-            "refresh_token"
+        estatisticas = (
+            db.estatisticas()
         )
 
-    if token.get(
-        "user_id"
-    ) is not None:
+    except Exception:
 
-        session[
-            "user_id"
-        ] = token.get(
-            "user_id"
+        logger.exception(
+            "Erro obtendo estatísticas do banco."
         )
 
-    if token.get(
-        "expires_in"
-    ) is not None:
+        estatisticas = {}
 
-        session[
-            "expires_in"
-        ] = token.get(
-            "expires_in"
-        )
+    return jsonify({
 
-    session[
-        "mercado_livre_connected"
-    ] = True
+        "sucesso":
+            True,
 
-    session.pop(
-        "oauth_state",
-        None,
-    )
+        "mercado_livre": {
 
-    session.pop(
-        "oauth_code_verifier",
-        None,
-    )
+            "configurado":
+                mercado_livre_configurado(),
 
-    session.modified = True
+            "token_disponivel":
+                bool(ml_token),
 
-    logger.info(
-        "Mercado Livre conectado com sucesso."
-    )
+            "conectado":
+                bool(
+                    session.get(
+                        "access_token"
+                    )
+                ),
 
-    return redirect(
-        "/?mercado_livre=conectado"
-    )
+            "site_id":
+                getattr(
+                    Config,
+                    "ML_SITE_ID",
+                    "MLB",
+                ),
+
+            "api":
+                getattr(
+                    Config,
+                    "ML_API_BASE",
+                    "https://api.mercadolibre.com",
+                ),
+
+            "redirect_uri_configurado":
+                bool(
+                    getattr(
+                        Config,
+                        "ML_REDIRECT_URI",
+                        "",
+                    )
+                ),
+
+        },
+
+        "whatsapp": {
+
+            "configurado":
+                whatsapp_service.configurado(),
+
+        },
+
+        "database":
+            estatisticas,
+
+    })
 
 
 # ============================================================
-# DESCONECTAR
+# ROTA DE SAÚDE
 # ============================================================
 
 @routes.route(
-    "/auth/mercadolivre/logout",
+    "/health",
     methods=["GET"],
 )
-@routes.route(
-    "/api/auth/logout",
-    methods=["POST", "GET"],
-)
-def desconectar_mercado_livre():
-    """
-    Remove os dados OAuth da sessão.
-    """
+def health():
 
-    session.pop(
-        "access_token",
-        None,
-    )
+    return jsonify({
 
-    session.pop(
-        "refresh_token",
-        None,
-    )
+        "status":
+            "ok",
 
-    session.pop(
-        "user_id",
-        None,
-    )
+        "app":
+            getattr(
+                Config,
+                "APP_NAME",
+                "Robo Ofertas PRO",
+            ),
 
-    session.pop(
-        "expires_in",
-        None,
-    )
+        "version":
+            getattr(
+                Config,
+                "APP_VERSION",
+                "10.0.0",
+            ),
 
-    session.pop(
-        "mercado_livre_connected",
-        None,
-    )
-
-    session.pop(
-        "oauth_state",
-        None,
-    )
-
-    session.pop(
-        "oauth_code_verifier",
-        None,
-    )
-
-    session.modified = True
-
-    return jsonify(
-        sucesso=True,
-        conectado=False,
-        mensagem=(
-            "Mercado Livre desconectado."
-        ),
-    )
+    })
 
 
 # ============================================================
-# REGISTRO DO BLUEPRINT
+# EXPORTAÇÃO
 # ============================================================
-
-def register_auth_routes(
-    app,
-):
-    """
-    Registra as rotas de autenticação na aplicação.
-
-    O app.py procura exatamente esta função.
-    """
-
-    app.register_blueprint(
-        routes
-    )
-
-    logger.info(
-        "Rotas de autenticação carregadas."
-    )
-
-    return app
-
 
 __all__ = [
     "routes",
-    "register_auth_routes",
 ]
