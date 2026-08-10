@@ -2,7 +2,19 @@
 Robo Ofertas PRO
 ================
 
-Núcleo da aplicação Flask.
+Núcleo principal da aplicação Flask.
+
+Responsabilidades:
+- criar a aplicação Flask;
+- carregar configurações;
+- inicializar extensões;
+- registrar rotas;
+- registrar autenticação do Mercado Livre;
+- configurar segurança;
+- disponibilizar health check;
+- disponibilizar diagnóstico;
+- tratar erros;
+- iniciar o servidor local quando executado diretamente.
 """
 
 from __future__ import annotations
@@ -22,6 +34,12 @@ from flask import (
 from config import get_config
 from extensions import init_extensions
 
+# ============================================================
+# AUTENTICAÇÃO MERCADO LIVRE
+# ============================================================
+
+from routes.auth import register_auth_routes
+
 
 # ============================================================
 # CONSTANTES
@@ -29,14 +47,21 @@ from extensions import init_extensions
 
 LOGGER_NAME = "robo-ofertas"
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(
+    __file__
+).resolve().parent
 
 
 # ============================================================
 # LOGGING
 # ============================================================
 
-def configure_logging(app: Flask) -> None:
+def configure_logging(
+    app: Flask,
+) -> None:
+    """
+    Configura o sistema de logs.
+    """
 
     level_name = app.config.get(
         "LOG_LEVEL",
@@ -60,13 +85,19 @@ def configure_logging(app: Flask) -> None:
         LOGGER_NAME
     )
 
-    logger.setLevel(level)
+    logger.setLevel(
+        level
+    )
 
     if not logger.handlers:
 
-        console_handler = logging.StreamHandler()
+        console_handler = (
+            logging.StreamHandler()
+        )
 
-        console_handler.setLevel(level)
+        console_handler.setLevel(
+            level
+        )
 
         console_handler.setFormatter(
             formatter
@@ -84,17 +115,30 @@ def configure_logging(app: Flask) -> None:
 # ============================================================
 
 def ensure_directories() -> None:
+    """
+    Garante que os diretórios básicos existam.
+    """
 
     directories = [
+
         BASE_DIR / "logs",
+
         BASE_DIR / "database",
+
         BASE_DIR / "static",
+
         BASE_DIR / "static" / "css",
+
         BASE_DIR / "static" / "js",
+
         BASE_DIR / "static" / "img",
+
         BASE_DIR / "static" / "icons",
+
         BASE_DIR / "templates",
+
         BASE_DIR / "tests",
+
     ]
 
     for directory in directories:
@@ -106,12 +150,15 @@ def ensure_directories() -> None:
 
 
 # ============================================================
-# SEGURANÇA
+# HEADERS DE SEGURANÇA
 # ============================================================
 
 def register_security_headers(
     app: Flask,
 ) -> None:
+    """
+    Adiciona headers básicos de segurança.
+    """
 
     if not app.config.get(
         "SECURITY_HEADERS_ENABLED",
@@ -120,7 +167,9 @@ def register_security_headers(
         return
 
     @app.after_request
-    def security_headers(response):
+    def security_headers(
+        response
+    ):
 
         response.headers.setdefault(
             "X-Content-Type-Options",
@@ -169,14 +218,21 @@ def register_security_headers(
 def register_request_tracking(
     app: Flask,
 ) -> None:
+    """
+    Registra tempo básico das requisições.
+    """
 
     @app.before_request
     def request_started():
 
-        request._robo_request_started = time.time()
+        request._robo_request_started = (
+            time.time()
+        )
 
     @app.after_request
-    def request_finished(response):
+    def request_finished(
+        response
+    ):
 
         started = getattr(
             request,
@@ -187,7 +243,9 @@ def register_request_tracking(
         if started is not None:
 
             duration = (
-                time.time() - started
+                time.time()
+                -
+                started
             )
 
             response.headers.setdefault(
@@ -199,17 +257,37 @@ def register_request_tracking(
 
 
 # ============================================================
-# ROTAS INTERNAS
+# ROTAS PRINCIPAIS
 # ============================================================
 
 def register_core_routes(
     app: Flask,
 ) -> None:
+    """
+    Registra as rotas básicas da aplicação.
+    """
 
-    @app.route("/")
+    @app.route(
+        "/",
+        methods=["GET"],
+    )
     def home():
 
         connected = False
+
+        try:
+
+            from flask import session
+
+            connected = bool(
+                session.get(
+                    "access_token"
+                )
+            )
+
+        except Exception:
+
+            connected = False
 
         try:
 
@@ -217,53 +295,116 @@ def register_core_routes(
                 "index.html",
                 connected=connected,
                 app_name=app.config.get(
-                    "APP_NAME"
+                    "APP_NAME",
+                    "Robo Ofertas PRO",
                 ),
                 version=app.config.get(
-                    "APP_VERSION"
+                    "APP_VERSION",
+                    "10.0.0",
                 ),
             )
 
-        except Exception:
+        except Exception as exc:
+
+            logging.getLogger(
+                LOGGER_NAME
+            ).exception(
+                "Erro carregando index.html: %s",
+                exc,
+            )
 
             return jsonify(
+
                 ok=True,
+
                 app=app.config.get(
-                    "APP_NAME"
+                    "APP_NAME",
+                    "Robo Ofertas PRO",
                 ),
+
                 version=app.config.get(
-                    "APP_VERSION"
+                    "APP_VERSION",
+                    "10.0.0",
                 ),
+
                 status="online",
+
                 mensagem=(
-                    "Aplicação funcionando. "
-                    "Interface ainda em construção."
+                    "Aplicação funcionando."
                 ),
+
             )
 
 
-    @app.route("/health")
+    # ========================================================
+    # HEALTH
+    # ========================================================
+
+    @app.route(
+        "/health",
+        methods=["GET"],
+    )
     def health():
 
         return jsonify(
+
             ok=True,
+
             status="online",
+
             app=app.config.get(
-                "APP_NAME"
+                "APP_NAME",
+                "Robo Ofertas PRO",
             ),
+
             version=app.config.get(
-                "APP_VERSION"
+                "APP_VERSION",
+                "10.0.0",
             ),
+
             environment=app.config.get(
-                "ENVIRONMENT"
+                "ENVIRONMENT",
+                "production",
             ),
+
             timestamp=int(
                 time.time()
             ),
+
         )
 
 
-    @app.route("/api/status")
+    # ========================================================
+    # PING
+    # ========================================================
+
+    @app.route(
+        "/api/ping",
+        methods=["GET"],
+    )
+    def api_ping():
+
+        return jsonify(
+
+            ok=True,
+
+            message="pong",
+
+            timestamp=int(
+                time.time()
+            ),
+
+        )
+
+
+    # ========================================================
+    # STATUS GERAL
+    # ========================================================
+
+    @app.route(
+        "/api/status",
+        methods=["GET"],
+    )
     def api_status():
 
         config_class = app.config.get(
@@ -272,60 +413,36 @@ def register_core_routes(
 
         if config_class:
 
-            # Compatibilidade com diferentes versões
-            # da classe Config.
-
-            if hasattr(
-                config_class,
-                "mercado_livre_configured"
-            ):
+            try:
 
                 ml_configured = (
                     config_class
                     .mercado_livre_configured()
                 )
 
-            elif hasattr(
-                config_class,
-                "mercado_livre_configurado"
-            ):
-
-                ml_configured = (
-                    config_class
-                    .mercado_livre_configurado()
-                )
-
-            else:
+            except Exception:
 
                 ml_configured = False
 
-
-            if hasattr(
-                config_class,
-                "mercado_livre_summary"
-            ):
+            try:
 
                 ml_summary = (
                     config_class
                     .mercado_livre_summary()
                 )
 
-            else:
+            except Exception:
 
                 ml_summary = {}
 
-
-            if hasattr(
-                config_class,
-                "security_summary"
-            ):
+            try:
 
                 security_summary = (
                     config_class
                     .security_summary()
                 )
 
-            else:
+            except Exception:
 
                 security_summary = {}
 
@@ -338,36 +455,62 @@ def register_core_routes(
             security_summary = {}
 
 
+        try:
+
+            from flask import session
+
+            connected = bool(
+                session.get(
+                    "access_token"
+                )
+            )
+
+        except Exception:
+
+            connected = False
+
+
         return jsonify(
+
             ok=True,
+
             application={
-                "name": app.config.get(
-                    "APP_NAME"
-                ),
-                "version": app.config.get(
-                    "APP_VERSION"
-                ),
-                "environment": app.config.get(
-                    "ENVIRONMENT"
-                ),
+
+                "name":
+                    app.config.get(
+                        "APP_NAME",
+                        "Robo Ofertas PRO",
+                    ),
+
+                "version":
+                    app.config.get(
+                        "APP_VERSION",
+                        "10.0.0",
+                    ),
+
+                "environment":
+                    app.config.get(
+                        "ENVIRONMENT",
+                        "production",
+                    ),
+
             },
+
             mercado_livre={
-                "configured": ml_configured,
+
+                "configured":
+                    ml_configured,
+
+                "connected":
+                    connected,
+
                 **ml_summary,
+
             },
-            security=security_summary,
-        )
 
+            security=
+                security_summary,
 
-    @app.route("/api/ping")
-    def api_ping():
-
-        return jsonify(
-            ok=True,
-            message="pong",
-            timestamp=int(
-                time.time()
-            ),
         )
 
 
@@ -378,28 +521,35 @@ def register_core_routes(
 def register_future_routes(
     app: Flask,
 ) -> None:
+    """
+    Registra módulos adicionais quando disponíveis.
+
+    O módulo de autenticação NÃO é carregado aqui.
+    Ele é registrado diretamente em create_app().
+    """
 
     modules = [
-        (
-            "routes.auth",
-            "register_auth_routes",
-        ),
+
         (
             "routes.produtos",
             "register_product_routes",
         ),
+
         (
             "routes.diagnostico",
             "register_diagnostic_routes",
         ),
+
         (
             "routes.whatsapp",
             "register_whatsapp_routes",
         ),
+
         (
             "routes.admin",
             "register_admin_routes",
         ),
+
     ]
 
     logger = logging.getLogger(
@@ -422,7 +572,9 @@ def register_future_routes(
                 function_name,
             )
 
-            register_function(app)
+            register_function(
+                app
+            )
 
             logger.info(
                 "Módulo carregado: %s",
@@ -470,26 +622,52 @@ def register_error_handlers(
         ):
 
             return jsonify(
+
                 ok=False,
+
                 erro="not_found",
-                mensagem="Rota não encontrada.",
+
+                mensagem=(
+                    "Rota não encontrada."
+                ),
+
                 rota=request.path,
+
             ), 404
 
+
         return (
+
             "<!doctype html>"
+
             "<html lang='pt-BR'>"
+
             "<head>"
+
             "<meta charset='utf-8'>"
+
+            "<meta name='viewport' "
+            "content='width=device-width, "
+            "initial-scale=1.0'>"
+
             "<title>Não encontrado</title>"
+
             "</head>"
+
             "<body>"
+
             "<h1>404</h1>"
+
             "<p>Rota não encontrada.</p>"
+
             "<a href='/'>Voltar</a>"
+
             "</body>"
+
             "</html>",
+
             404,
+
         )
 
 
@@ -501,14 +679,21 @@ def register_error_handlers(
         ):
 
             return jsonify(
+
                 ok=False,
+
                 erro="method_not_allowed",
+
                 mensagem=(
                     "Método HTTP não permitido."
                 ),
+
                 metodo=request.method,
+
                 rota=request.path,
+
             ), 405
+
 
         return (
             "Método HTTP não permitido.",
@@ -532,29 +717,48 @@ def register_error_handlers(
         ):
 
             return jsonify(
+
                 ok=False,
+
                 erro="internal_server_error",
+
                 mensagem=(
                     "Erro interno do servidor."
                 ),
+
             ), 500
 
+
         return (
+
             "<!doctype html>"
+
             "<html lang='pt-BR'>"
+
             "<head>"
+
             "<meta charset='utf-8'>"
+
             "<title>Erro interno</title>"
+
             "</head>"
+
             "<body>"
+
             "<h1>Erro interno</h1>"
+
             "<p>"
             "O servidor encontrou um problema."
             "</p>"
+
             "<a href='/'>Voltar</a>"
+
             "</body>"
+
             "</html>",
+
             500,
+
         )
 
 
@@ -565,35 +769,40 @@ def register_error_handlers(
 def configure_session(
     app: Flask,
 ) -> None:
+    """
+    Configura os cookies da sessão.
+    """
 
-    app.config["SESSION_COOKIE_NAME"] = (
-        app.config.get(
-            "SESSION_COOKIE_NAME",
-            "robo_ofertas_session",
-        )
+    app.config[
+        "SESSION_COOKIE_NAME"
+    ] = app.config.get(
+        "SESSION_COOKIE_NAME",
+        "robo_ofertas_session",
     )
 
-    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config[
+        "SESSION_COOKIE_HTTPONLY"
+    ] = True
 
-    app.config["SESSION_COOKIE_SAMESITE"] = (
-        app.config.get(
-            "SESSION_COOKIE_SAMESITE",
-            "Lax",
-        )
+    app.config[
+        "SESSION_COOKIE_SAMESITE"
+    ] = app.config.get(
+        "SESSION_COOKIE_SAMESITE",
+        "Lax",
     )
 
-    app.config["SESSION_COOKIE_SECURE"] = (
-        app.config.get(
-            "SESSION_COOKIE_SECURE",
-            True,
-        )
+    app.config[
+        "SESSION_COOKIE_SECURE"
+    ] = app.config.get(
+        "SESSION_COOKIE_SECURE",
+        True,
     )
 
-    app.config["PERMANENT_SESSION_LIFETIME"] = (
-        app.config.get(
-            "PERMANENT_SESSION_LIFETIME",
-            86400,
-        )
+    app.config[
+        "PERMANENT_SESSION_LIFETIME"
+    ] = app.config.get(
+        "PERMANENT_SESSION_LIFETIME",
+        86400,
     )
 
 
@@ -604,25 +813,75 @@ def configure_session(
 def create_app(
     config_class=None,
 ) -> Flask:
+    """
+    Cria e configura a aplicação Flask.
+    """
 
     ensure_directories()
+
+
+    # --------------------------------------------------------
+    # CONFIGURAÇÃO
+    # --------------------------------------------------------
 
     if config_class is None:
 
         config_class = get_config()
+
 
     app = Flask(
         __name__,
         instance_relative_config=True,
     )
 
+
     app.config.from_object(
         config_class
     )
 
+
+    # --------------------------------------------------------
+    # GARANTIAS DE CONFIGURAÇÃO
+    # --------------------------------------------------------
+
+    if not app.config.get(
+        "APP_NAME"
+    ):
+
+        app.config[
+            "APP_NAME"
+        ] = "Robo Ofertas PRO"
+
+
+    if not app.config.get(
+        "APP_VERSION"
+    ):
+
+        app.config[
+            "APP_VERSION"
+        ] = "10.0.0"
+
+
+    if not app.config.get(
+        "ENVIRONMENT"
+    ):
+
+        app.config[
+            "ENVIRONMENT"
+        ] = "production"
+
+
+    # Guarda a classe de configuração
+    # para os endpoints de diagnóstico.
+
     app.config[
         "_ROBO_CONFIG_CLASS"
     ] = config_class
+
+
+    # --------------------------------------------------------
+    # LOGGING
+    # --------------------------------------------------------
 
     configure_logging(
         app
@@ -631,6 +890,7 @@ def create_app(
     logger = logging.getLogger(
         LOGGER_NAME
     )
+
 
     logger.info(
         "Criando %s v%s",
@@ -642,13 +902,28 @@ def create_app(
         ),
     )
 
+
+    # --------------------------------------------------------
+    # SESSÃO
+    # --------------------------------------------------------
+
     configure_session(
         app
     )
 
+
+    # --------------------------------------------------------
+    # EXTENSÕES
+    # --------------------------------------------------------
+
     init_extensions(
         app
     )
+
+
+    # --------------------------------------------------------
+    # SEGURANÇA
+    # --------------------------------------------------------
 
     register_security_headers(
         app
@@ -658,37 +933,98 @@ def create_app(
         app
     )
 
+
+    # --------------------------------------------------------
+    # ROTAS PRINCIPAIS
+    # --------------------------------------------------------
+
     register_core_routes(
         app
     )
+
+
+    # --------------------------------------------------------
+    # AUTENTICAÇÃO MERCADO LIVRE
+    #
+    # IMPORTANTE:
+    # Registro direto para garantir que:
+    #
+    # /auth/mercadolivre
+    # /auth/mercadolivre/connect
+    # /auth/callback
+    # /auth/mercadolivre/callback
+    # /api/auth/status
+    #
+    # estejam disponíveis.
+    # --------------------------------------------------------
+
+    register_auth_routes(
+        app
+    )
+
+
+    logger.info(
+        "Rotas de autenticação carregadas."
+    )
+
+
+    # --------------------------------------------------------
+    # TRATAMENTO DE ERROS
+    # --------------------------------------------------------
 
     register_error_handlers(
         app
     )
 
+
+    # --------------------------------------------------------
+    # OUTROS MÓDULOS
+    # --------------------------------------------------------
+
     register_future_routes(
         app
     )
+
+
+    # --------------------------------------------------------
+    # DIAGNÓSTICO
+    # --------------------------------------------------------
+
+    try:
+
+        ml_configured = (
+            config_class
+            .mercado_livre_configured()
+        )
+
+    except Exception:
+
+        ml_configured = False
+
+
+    logger.info(
+        "Mercado Livre configurado: %s",
+        ml_configured,
+    )
+
 
     logger.info(
         "Aplicação inicializada."
     )
 
+
     return app
 
 
 # ============================================================
-# INSTÂNCIA WSGI
-# ============================================================
+# OBJETO WSGI
 #
-# IMPORTANTE:
 # O Render executa:
 #
-#     gunicorn app:app
+# gunicorn app:app
 #
-# Portanto, precisamos disponibilizar uma variável
-# chamada "app" neste módulo.
-#
+# Portanto a variável "app" precisa existir.
+# ============================================================
 
 app = create_app()
 
@@ -702,13 +1038,23 @@ if __name__ == "__main__":
     port = int(
         os.getenv(
             "PORT",
-            "5000",
+            str(
+                app.config.get(
+                    "PORT",
+                    5000,
+                )
+            ),
         )
     )
 
     host = os.getenv(
         "HOST",
-        "0.0.0.0",
+        str(
+            app.config.get(
+                "HOST",
+                "0.0.0.0",
+            )
+        ),
     )
 
     app.run(
