@@ -3,9 +3,6 @@ import secrets
 
 
 def env_bool(name: str, default: bool = False) -> bool:
-    """
-    Lê uma variável de ambiente como booleano.
-    """
     value = os.getenv(name)
 
     if value is None:
@@ -21,9 +18,6 @@ def env_bool(name: str, default: bool = False) -> bool:
 
 
 def env_int(name: str, default: int) -> int:
-    """
-    Lê uma variável de ambiente como inteiro.
-    """
     value = os.getenv(name)
 
     if value is None:
@@ -36,9 +30,6 @@ def env_int(name: str, default: int) -> int:
 
 
 class Config:
-    """
-    Configuração principal do Robo Ofertas PRO.
-    """
 
     # ========================================================
     # APLICAÇÃO
@@ -46,7 +37,7 @@ class Config:
 
     APP_NAME = os.getenv(
         "APP_NAME",
-        "Robo Ofertas PRO",
+        "Robo Ofertas ML",
     )
 
     APP_VERSION = os.getenv(
@@ -70,7 +61,7 @@ class Config:
     )
 
     # ========================================================
-    # PORTA / SERVIDOR
+    # SERVIDOR
     # ========================================================
 
     PORT = env_int(
@@ -84,7 +75,7 @@ class Config:
     )
 
     # ========================================================
-    # CHAVE DA SESSÃO
+    # SEGURANÇA / SESSÃO
     # ========================================================
 
     SECRET_KEY = os.getenv(
@@ -95,15 +86,8 @@ class Config:
         ),
     ).strip()
 
-    # Em desenvolvimento, cria uma chave temporária.
-    # Em produção, recomendamos configurar
-    # FLASK_SECRET_KEY no Render.
     if not SECRET_KEY:
         SECRET_KEY = secrets.token_hex(32)
-
-    # ========================================================
-    # SESSÃO
-    # ========================================================
 
     SESSION_COOKIE_NAME = os.getenv(
         "SESSION_COOKIE_NAME",
@@ -166,8 +150,18 @@ class Config:
         "https://api.mercadolibre.com/oauth/token",
     ).strip()
 
+    ML_ACCESS_TOKEN = os.getenv(
+        "ML_ACCESS_TOKEN",
+        "",
+    ).strip()
+
+    ML_REFRESH_TOKEN = os.getenv(
+        "ML_REFRESH_TOKEN",
+        "",
+    ).strip()
+
     # ========================================================
-    # MERCADO LIVRE — TIMEOUTS
+    # MERCADO LIVRE - TIMEOUT
     # ========================================================
 
     ML_CONNECT_TIMEOUT = env_int(
@@ -181,7 +175,7 @@ class Config:
     )
 
     # ========================================================
-    # MERCADO LIVRE — BUSCA
+    # MERCADO LIVRE - BUSCA
     # ========================================================
 
     ML_SEARCH_LIMIT = env_int(
@@ -200,8 +194,37 @@ class Config:
 
     ML_USER_AGENT = os.getenv(
         "ML_USER_AGENT",
-        "Robo-Ofertas-PRO/10.0",
+        "Robo-Ofertas-ML/10.0",
     ).strip()
+
+    # ========================================================
+    # OFERTAS
+    # ========================================================
+
+    MARGEM_PADRAO = env_int(
+        "MARGEM_PADRAO",
+        10,
+    )
+
+    LUCRO_MINIMO_PADRAO = env_int(
+        "LUCRO_MINIMO_PADRAO",
+        20,
+    )
+
+    DESCONTO_MINIMO_PADRAO = env_int(
+        "DESCONTO_MINIMO_PADRAO",
+        5,
+    )
+
+    LIMITE_OFERTAS = env_int(
+        "LIMITE_OFERTAS",
+        20,
+    )
+
+    INTERVALO_OFERTAS = env_int(
+        "INTERVALO_OFERTAS",
+        60,
+    )
 
     # ========================================================
     # CACHE
@@ -242,7 +265,7 @@ class Config:
     )
 
     # ========================================================
-    # LOGGING
+    # LOG
     # ========================================================
 
     LOG_LEVEL = os.getenv(
@@ -307,14 +330,14 @@ class Config:
     )
 
     # ========================================================
-    # MÉTODOS AUXILIARES
+    # MERCADO LIVRE - VERIFICAÇÃO
     # ========================================================
 
     @classmethod
     def mercado_livre_configured(cls) -> bool:
         """
-        Verifica se as três configurações essenciais
-        do OAuth do Mercado Livre existem.
+        Nome utilizado pelas rotas de autenticação.
+        Mantido em inglês para compatibilidade.
         """
 
         return bool(
@@ -324,54 +347,74 @@ class Config:
         )
 
     @classmethod
-    def security_summary(cls) -> dict:
+    def mercado_livre_configurado(cls) -> bool:
         """
-        Retorna informações de segurança sem expor
-        valores secretos.
+        Alias em português.
         """
 
-        return {
-            "secret_key_configured": bool(
-                cls.SECRET_KEY
-            ),
-            "session_httponly": cls.SESSION_COOKIE_HTTPONLY,
-            "session_samesite": cls.SESSION_COOKIE_SAMESITE,
-            "session_secure": cls.SESSION_COOKIE_SECURE,
-            "csrf_enabled": cls.CSRF_ENABLED,
-            "security_headers_enabled": (
-                cls.SECURITY_HEADERS_ENABLED
-            ),
-        }
+        return cls.mercado_livre_configured()
+
+    # ========================================================
+    # RESUMO DO MERCADO LIVRE
+    # ========================================================
 
     @classmethod
     def mercado_livre_summary(cls) -> dict:
-        """
-        Retorna o diagnóstico da configuração do
-        Mercado Livre sem revelar Client Secret.
-        """
 
         return {
             "client_id_configured": bool(
                 cls.ML_CLIENT_ID
             ),
+
             "client_secret_configured": bool(
                 cls.ML_CLIENT_SECRET
             ),
+
             "redirect_uri_configured": bool(
                 cls.ML_REDIRECT_URI
             ),
-            "site_id": cls.ML_SITE_ID,
-            "api_base": cls.ML_API_BASE,
-            "oauth_configured": (
-                cls.mercado_livre_configured()
-            ),
+
+            "site_id":
+                cls.ML_SITE_ID,
+
+            "api_base":
+                cls.ML_API_BASE,
+
+            "oauth_configured":
+                cls.mercado_livre_configured(),
+        }
+
+    # ========================================================
+    # RESUMO DE SEGURANÇA
+    # ========================================================
+
+    @classmethod
+    def security_summary(cls) -> dict:
+
+        return {
+
+            "secret_key_configured":
+                bool(cls.SECRET_KEY),
+
+            "session_httponly":
+                cls.SESSION_COOKIE_HTTPONLY,
+
+            "session_samesite":
+                cls.SESSION_COOKIE_SAMESITE,
+
+            "session_secure":
+                cls.SESSION_COOKIE_SECURE,
+
+            "csrf_enabled":
+                cls.CSRF_ENABLED,
+
+            "security_headers_enabled":
+                cls.SECURITY_HEADERS_ENABLED,
+
         }
 
 
 class DevelopmentConfig(Config):
-    """
-    Configuração para desenvolvimento local.
-    """
 
     ENVIRONMENT = "development"
 
@@ -381,9 +424,6 @@ class DevelopmentConfig(Config):
 
 
 class TestingConfig(Config):
-    """
-    Configuração utilizada pelos testes.
-    """
 
     ENVIRONMENT = "testing"
 
@@ -397,9 +437,6 @@ class TestingConfig(Config):
 
 
 def get_config():
-    """
-    Seleciona automaticamente a configuração.
-    """
 
     environment = os.getenv(
         "ENVIRONMENT",
@@ -413,3 +450,10 @@ def get_config():
         return TestingConfig
 
     return Config
+
+
+# ============================================================
+# COMPATIBILIDADE
+# ============================================================
+
+config = Config
