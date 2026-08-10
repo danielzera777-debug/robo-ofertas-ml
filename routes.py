@@ -4,12 +4,9 @@ Robo de Ofertas ML
 Versão 11.2
 
 FOCO EXCLUSIVO:
-    ROUPAS FITNESS FEMININAS
+    Roupas Fitness Femininas
 
-Não registra o blueprint de autenticação.
-A autenticação OAuth fica no auth.py.
-
-Principais rotas:
+ROTAS:
     /api/status
     /api/auth/status
     /api/diagnostico
@@ -20,6 +17,10 @@ Principais rotas:
     /api/publicacoes
     /api/config
     /health
+
+IMPORTANTE:
+    A autenticação OAuth fica no auth.py.
+    Este arquivo NÃO registra o blueprint "auth".
 """
 
 from __future__ import annotations
@@ -68,6 +69,13 @@ ML_SITE_ID = getattr(
 )
 
 
+APP_VERSION = getattr(
+    Config,
+    "APP_VERSION",
+    "11.2.0",
+)
+
+
 # ============================================================
 # BLUEPRINT
 # ============================================================
@@ -79,7 +87,7 @@ routes = Blueprint(
 
 
 # ============================================================
-# NICHO ÚNICO
+# NICHO
 # ============================================================
 
 NICHO = "Roupas Fitness Femininas"
@@ -88,8 +96,8 @@ NICHO = "Roupas Fitness Femininas"
 TERMOS_FITNESS = [
     "legging fitness feminina",
     "legging academia feminina",
-    "calça legging feminina",
     "calca legging feminina",
+    "calça legging feminina",
     "conjunto fitness feminino",
     "conjunto academia feminino",
     "top fitness feminino",
@@ -97,19 +105,14 @@ TERMOS_FITNESS = [
     "short fitness feminino",
     "short academia feminino",
     "bermuda fitness feminina",
-    "bermuda academia feminina",
     "cropped fitness feminino",
-    "cropped academia feminino",
     "blusa fitness feminina",
-    "blusa academia feminina",
     "camiseta fitness feminina",
-    "camiseta academia feminina",
     "regata fitness feminina",
-    "regata academia feminina",
-    "macacão fitness feminino",
     "macacao fitness feminino",
-    "calça fitness feminina",
+    "macacão fitness feminino",
     "calca fitness feminina",
+    "calça fitness feminina",
 ]
 
 
@@ -131,7 +134,60 @@ TERMOS_BLOQUEADOS = [
 
 
 # ============================================================
-# AUXILIARES
+# TERMOS VÁLIDOS
+# ============================================================
+
+TERMOS_VALIDOS = [
+    "legging",
+    "fitness",
+    "academia",
+    "top",
+    "cropped",
+    "conjunto",
+    "short",
+    "bermuda",
+    "regata",
+    "macacao",
+    "calca",
+]
+
+
+# ============================================================
+# AUXILIAR
+# ============================================================
+
+def remover_acentos(valor):
+    """
+    Remove acentos para facilitar a comparação
+    dos títulos dos produtos.
+    """
+
+    texto = str(
+        valor or ""
+    )
+
+    texto = unicodedata.normalize(
+        "NFD",
+        texto,
+    )
+
+    return "".join(
+        caractere
+        for caractere in texto
+        if unicodedata.category(
+            caractere
+        ) != "Mn"
+    )
+
+
+def texto_normalizado(valor):
+    return remover_acentos(
+        valor
+    ).lower().strip()
+
+
+# ============================================================
+# RESPOSTA DE ERRO
 # ============================================================
 
 def resposta_erro(
@@ -140,57 +196,54 @@ def resposta_erro(
     **extra,
 ):
     """
-    Retorna erro JSON.
+    Retorna erros de forma segura.
 
     IMPORTANTE:
-    Não passar mensagem= dentro de **extra,
-    pois mensagem já é argumento desta função.
+    Não usar:
+        resposta_erro(
+            "...",
+            mensagem="..."
+        )
+
+    pois isso gera:
+        got multiple values for argument 'mensagem'
     """
 
     resposta = {
         "sucesso": False,
-        "erro": mensagem,
+        "erro": str(mensagem),
     }
 
-    resposta.update(extra)
+    resposta.update(
+        extra
+    )
 
-    return jsonify(resposta), status
+    return jsonify(
+        resposta
+    ), status
 
+
+# ============================================================
+# INTEIRO
+# ============================================================
 
 def inteiro(
     valor,
     padrao=20,
 ):
+
     try:
-        return int(valor)
+
+        return int(
+            valor
+        )
+
     except (
         ValueError,
         TypeError,
     ):
+
         return padrao
-
-
-def remover_acentos(texto):
-    texto = str(texto or "")
-
-    return "".join(
-        caractere
-        for caractere in unicodedata.normalize(
-            "NFD",
-            texto,
-        )
-        if unicodedata.category(
-            caractere
-        ) != "Mn"
-    )
-
-
-def texto_normalizado(texto):
-    return (
-        remover_acentos(texto)
-        .lower()
-        .strip()
-    )
 
 
 # ============================================================
@@ -199,9 +252,9 @@ def texto_normalizado(texto):
 
 def token_mercado_livre():
     """
-    Primeiro procura o token OAuth na sessão.
+    Obtém o token somente da sessão ou da configuração.
 
-    Não mostra o token em logs ou respostas.
+    O token nunca é colocado no log.
     """
 
     token = session.get(
@@ -209,17 +262,23 @@ def token_mercado_livre():
     )
 
     if token:
-        return token
+        return str(
+            token
+        ).strip()
 
-    return getattr(
+    token = getattr(
         Config,
         "ML_ACCESS_TOKEN",
         "",
     )
 
+    return str(
+        token or ""
+    ).strip()
+
 
 # ============================================================
-# CONFIGURAÇÃO MERCADO LIVRE
+# CONFIGURAÇÃO ML
 # ============================================================
 
 def mercado_livre_configurado():
@@ -233,13 +292,15 @@ def mercado_livre_configurado():
     if callable(metodo):
 
         try:
+
             return bool(
                 metodo()
             )
 
         except Exception:
+
             logger.exception(
-                "Erro verificando mercado_livre_configured."
+                "Erro em mercado_livre_configured."
             )
 
     metodo = getattr(
@@ -251,13 +312,15 @@ def mercado_livre_configurado():
     if callable(metodo):
 
         try:
+
             return bool(
                 metodo()
             )
 
         except Exception:
+
             logger.exception(
-                "Erro verificando mercado_livre_configurado."
+                "Erro em mercado_livre_configurado."
             )
 
     return bool(
@@ -283,6 +346,7 @@ def mercado_livre_configurado():
             "ML_REDIRECT_URI",
             "",
         )
+
     )
 
 
@@ -293,18 +357,27 @@ def mercado_livre_configurado():
 def headers_ml():
 
     headers = {
-        "Accept": "application/json",
-        "User-Agent": (
-            "Robo-Ofertas-ML/11.2"
-        ),
+
+        "Accept":
+            "application/json",
+
+        "Content-Type":
+            "application/json",
+
+        "User-Agent":
+            "Robo-Ofertas-ML/11.2",
+
     }
 
     token = token_mercado_livre()
 
     if token:
 
-        headers["Authorization"] = (
-            f"Bearer {token}"
+        headers[
+            "Authorization"
+        ] = (
+            "Bearer "
+            + token
         )
 
     return headers
@@ -317,12 +390,6 @@ def headers_ml():
 def produto_feminino(
     titulo,
 ):
-    """
-    Aceita somente produtos relacionados
-    a roupas fitness femininas.
-
-    Produtos masculinos são rejeitados.
-    """
 
     texto = texto_normalizado(
         titulo
@@ -332,103 +399,60 @@ def produto_feminino(
         return False
 
     # --------------------------------------------------------
-    # BLOQUEIO MASCULINO
+    # BLOQUEIA PRODUTO MASCULINO
     # --------------------------------------------------------
 
     for termo in TERMOS_BLOQUEADOS:
 
-        if texto_normalizado(
-            termo
-        ) in texto:
+        if termo in texto:
 
             return False
 
     # --------------------------------------------------------
-    # PALAVRAS DE ROUPA
+    # DEVE SER PRODUTO DE VESTUÁRIO FITNESS
     # --------------------------------------------------------
 
-    palavras_roupa = [
-        "legging",
-        "calca",
-        "calça",
-        "top",
-        "cropped",
-        "conjunto",
-        "short",
-        "bermuda",
-        "regata",
-        "camiseta",
-        "blusa",
-        "macacao",
-        "macacão",
-    ]
+    possui_termo = any(
 
-    tem_roupa = any(
-        texto_normalizado(
-            termo
-        ) in texto
-        for termo in palavras_roupa
+        termo in texto
+
+        for termo in TERMOS_VALIDOS
+
     )
 
-    if not tem_roupa:
+    if not possui_termo:
+
         return False
 
     # --------------------------------------------------------
-    # CONTEXTO FITNESS
+    # EVITA ALGUNS FALSOS POSITIVOS
     # --------------------------------------------------------
 
-    contexto_fitness = [
-        "fitness",
-        "academia",
-        "treino",
-        "treino feminino",
-        "esportiva",
-        "esportivo",
-        "gym",
-        "corrida",
-        "pilates",
-        "crossfit",
+    termos_indesejados = [
+
+        "suplemento",
+        "whey",
+        "creatina",
+        "vitamina",
+        "celular",
+        "tenis masculino",
+        "sapato masculino",
+        "relogio",
+        "relógio",
+
     ]
 
-    tem_fitness = any(
-        texto_normalizado(
-            termo
-        ) in texto
-        for termo in contexto_fitness
-    )
+    for termo in termos_indesejados:
 
-    # --------------------------------------------------------
-    # PRODUTOS CLARAMENTE FEMININOS
-    # --------------------------------------------------------
+        if termo in texto:
 
-    feminino = [
-        "feminina",
-        "feminino",
-        "mulher",
-        "mulheres",
-    ]
+            return False
 
-    tem_feminino = any(
-        texto_normalizado(
-            termo
-        ) in texto
-        for termo in feminino
-    )
-
-    # Legging/top/conjunto etc. podem aparecer
-    # sem "feminina" no título. Nesses casos,
-    # aceitamos se o produto tiver contexto fitness.
-    if tem_fitness:
-        return True
-
-    if tem_feminino:
-        return True
-
-    return False
+    return True
 
 
 # ============================================================
-# PREÇO
+# FORMATAR PREÇO
 # ============================================================
 
 def formatar_preco(
@@ -437,15 +461,29 @@ def formatar_preco(
 
     try:
 
-        numero = float(
+        numero_valor = float(
             valor
         )
 
         return (
-            f"R$ {numero:,.2f}"
-            .replace(",", "X")
-            .replace(".", ",")
-            .replace("X", ".")
+
+            f"R$ {numero_valor:,.2f}"
+
+            .replace(
+                ",",
+                "X",
+            )
+
+            .replace(
+                ".",
+                ",",
+            )
+
+            .replace(
+                "X",
+                ".",
+            )
+
         )
 
     except (
@@ -477,24 +515,51 @@ def normalizar_produto(
     try:
 
         if (
+
             preco_original
-            and preco
-            and float(preco_original) > 0
-            and float(preco)
-            < float(preco_original)
+
+            and
+
+            preco is not None
+
+            and
+
+            float(
+                preco_original
+            ) > 0
+
+            and
+
+            float(
+                preco
+            )
+            <
+            float(
+                preco_original
+            )
+
         ):
 
             desconto = round(
+
                 (
+
                     1
+
                     -
+
                     (
                         float(preco)
                         /
-                        float(preco_original)
+                        float(
+                            preco_original
+                        )
                     )
+
                 )
+
                 * 100
+
             )
 
     except (
@@ -504,15 +569,16 @@ def normalizar_produto(
 
         desconto = 0
 
-    seller = (
-        item.get("seller")
-        or {}
-    )
+    seller = item.get(
+        "seller"
+    ) or {}
 
     return {
 
         "id":
-            item.get("id"),
+            item.get(
+                "id"
+            ),
 
         "titulo":
             item.get(
@@ -561,21 +627,27 @@ def normalizar_produto(
 
 
 # ============================================================
-# REQUISIÇÃO MERCADO LIVRE
+# REQUISIÇÃO ML
 # ============================================================
 
 def requisicao_ml(
     url,
     params=None,
+    timeout=30,
 ):
 
     try:
 
         response = requests.get(
+
             url,
+
             params=params,
+
             headers=headers_ml(),
-            timeout=30,
+
+            timeout=timeout,
+
         )
 
     except requests.RequestException as exc:
@@ -584,7 +656,7 @@ def requisicao_ml(
             "Erro de conexão com Mercado Livre."
         )
 
-        raise RuntimeError(
+        raise ConnectionError(
             f"Erro de conexão com Mercado Livre: {exc}"
         ) from exc
 
@@ -596,15 +668,37 @@ def requisicao_ml(
 
         payload = {
             "resposta":
-                response.text[:500]
+                response.text[
+                    :1000
+                ]
         }
+
+    # --------------------------------------------------------
+    # SUCESSO
+    # --------------------------------------------------------
+
+    if 200 <= response.status_code < 300:
+
+        return payload
+
+    # --------------------------------------------------------
+    # 401
+    # --------------------------------------------------------
 
     if response.status_code == 401:
 
-        raise PermissionError(
-            "Mercado Livre retornou HTTP 401. "
-            "O access_token é inválido ou expirou."
+        logger.error(
+            "Mercado Livre HTTP 401."
         )
+
+        raise PermissionError(
+            "Mercado Livre rejeitou o access_token "
+            "(HTTP 401). Faça uma nova autenticação."
+        )
+
+    # --------------------------------------------------------
+    # 403
+    # --------------------------------------------------------
 
     if response.status_code == 403:
 
@@ -613,25 +707,88 @@ def requisicao_ml(
             payload,
         )
 
-        raise PermissionError(
+        erro = RuntimeError(
             "Mercado Livre recusou a requisição "
-            "(HTTP 403). Verifique as permissões "
-            "da aplicação/token e o acesso à API."
+            "(HTTP 403)."
         )
 
-    if response.status_code != 200:
-
-        raise RuntimeError(
-            f"Mercado Livre HTTP "
-            f"{response.status_code}: "
-            f"{payload}"
+        setattr(
+            erro,
+            "status_code",
+            403,
         )
 
-    return payload
+        setattr(
+            erro,
+            "payload",
+            payload,
+        )
+
+        raise erro
+
+    # --------------------------------------------------------
+    # 429
+    # --------------------------------------------------------
+
+    if response.status_code == 429:
+
+        logger.error(
+            "Mercado Livre HTTP 429."
+        )
+
+        erro = RuntimeError(
+            "Mercado Livre limitou temporariamente "
+            "as requisições (HTTP 429)."
+        )
+
+        setattr(
+            erro,
+            "status_code",
+            429,
+        )
+
+        setattr(
+            erro,
+            "payload",
+            payload,
+        )
+
+        raise erro
+
+    # --------------------------------------------------------
+    # OUTROS
+    # --------------------------------------------------------
+
+    logger.error(
+        "Mercado Livre HTTP %s: %s",
+        response.status_code,
+        payload,
+    )
+
+    erro = RuntimeError(
+
+        f"Mercado Livre retornou HTTP "
+        f"{response.status_code}."
+
+    )
+
+    setattr(
+        erro,
+        "status_code",
+        response.status_code,
+    )
+
+    setattr(
+        erro,
+        "payload",
+        payload,
+    )
+
+    raise erro
 
 
 # ============================================================
-# TESTE DO TOKEN
+# TESTAR TOKEN
 # ============================================================
 
 def testar_token_ml():
@@ -641,12 +798,19 @@ def testar_token_ml():
     if not token:
 
         return {
-            "ok": False,
-            "status": None,
-            "erro": "access_token_ausente",
-            "mensagem": (
-                "Não existe access_token na sessão."
-            ),
+
+            "ok":
+                False,
+
+            "status":
+                None,
+
+            "erro":
+                "access_token_ausente",
+
+            "mensagem":
+                "Access token não encontrado.",
+
         }
 
     url = (
@@ -655,68 +819,97 @@ def testar_token_ml():
 
     try:
 
-        response = requests.get(
-            url,
-            headers=headers_ml(),
-            timeout=30,
+        payload = requisicao_ml(
+            url
         )
 
-    except requests.RequestException as exc:
+    except Exception as exc:
 
-        logger.exception(
-            "Erro conectando ao /users/me."
+        status_code = getattr(
+            exc,
+            "status_code",
+            None,
         )
 
-        return {
-            "ok": False,
-            "status": None,
-            "erro": "conexao",
-            "mensagem": str(exc),
-        }
+        payload = getattr(
+            exc,
+            "payload",
+            None,
+        )
 
-    try:
+        # ----------------------------------------------------
+        # 403
+        # ----------------------------------------------------
 
-        payload = response.json()
+        if status_code == 403:
 
-    except ValueError:
+            return {
 
-        payload = {
-            "resposta":
-                response.text[:500]
-        }
+                "ok":
+                    False,
 
-    if response.status_code == 200:
+                "status":
+                    403,
 
-        return {
+                "erro":
+                    "forbidden",
 
-            "ok":
-                True,
-
-            "status":
-                200,
-
-            "usuario": {
-
-                "id":
-                    payload.get(
-                        "id"
+                "mensagem":
+                    (
+                        "O Mercado Livre recusou "
+                        "o access token no endpoint "
+                        "/users/me."
                     ),
 
-                "nickname":
-                    payload.get(
-                        "nickname"
+                "resposta":
+                    payload,
+
+                "possiveis_causas": [
+
+                    "scope/permissão da aplicação",
+
+                    "usuário não autorizado",
+
+                    "access token incompatível",
+
+                    "IP não permitido",
+
+                    "aplicação bloqueada ou desabilitada",
+
+                    "usuário inativo ou suspenso",
+
+                ],
+
+            }
+
+        # ----------------------------------------------------
+        # 401
+        # ----------------------------------------------------
+
+        if status_code == 401:
+
+            return {
+
+                "ok":
+                    False,
+
+                "status":
+                    401,
+
+                "erro":
+                    "unauthorized",
+
+                "mensagem":
+                    (
+                        "O access token "
+                        "foi rejeitado."
                     ),
 
-                "country_id":
-                    payload.get(
-                        "country_id"
-                    ),
+            }
 
-            },
-
-        }
-
-    if response.status_code == 401:
+        # ----------------------------------------------------
+        # CONEXÃO
+        # ----------------------------------------------------
 
         return {
 
@@ -724,61 +917,54 @@ def testar_token_ml():
                 False,
 
             "status":
-                401,
+                status_code,
 
             "erro":
-                "unauthorized",
+                "erro_api",
 
             "mensagem":
-                "Access token inválido ou expirado.",
+                str(exc),
 
             "resposta":
                 payload,
 
         }
 
-    if response.status_code == 403:
-
-        return {
-
-            "ok":
-                False,
-
-            "status":
-                403,
-
-            "erro":
-                "forbidden",
-
-            "mensagem": (
-                "O Mercado Livre recusou o "
-                "access_token no endpoint /users/me."
-            ),
-
-            "resposta":
-                payload,
-
-            "acao": (
-                "Verifique as permissões da aplicação "
-                "no Mercado Livre e faça uma nova "
-                "autorização OAuth."
-            ),
-
-        }
+    # --------------------------------------------------------
+    # TOKEN VÁLIDO
+    # --------------------------------------------------------
 
     return {
 
         "ok":
-            False,
+            True,
 
         "status":
-            response.status_code,
+            200,
 
-        "erro":
-            "mercado_livre",
+        "usuario": {
 
-        "resposta":
-            payload,
+            "id":
+                payload.get(
+                    "id"
+                ),
+
+            "nickname":
+                payload.get(
+                    "nickname"
+                ),
+
+            "country_id":
+                payload.get(
+                    "country_id"
+                ),
+
+            "site_id":
+                payload.get(
+                    "site_id"
+                ),
+
+        },
 
     }
 
@@ -801,13 +987,25 @@ def buscar_mercado_livre(
     )
 
     url = (
-        f"{ML_API_BASE}/sites/"
-        f"{ML_SITE_ID}/search"
+
+        f"{ML_API_BASE}"
+
+        f"/sites/"
+
+        f"{ML_SITE_ID}"
+
+        "/search"
+
     )
 
     params = {
-        "q": consulta,
-        "limit": limite,
+
+        "q":
+            consulta,
+
+        "limit":
+            limite,
+
     }
 
     payload = requisicao_ml(
@@ -829,9 +1027,14 @@ def buscar_mercado_livre(
             "",
         )
 
+        # ----------------------------------------------------
+        # FILTRO FEMININO
+        # ----------------------------------------------------
+
         if not produto_feminino(
             titulo
         ):
+
             continue
 
         produto = normalizar_produto(
@@ -843,9 +1046,11 @@ def buscar_mercado_livre(
         )
 
         if not produto_id:
+
             continue
 
         if produto_id in vistos:
+
             continue
 
         vistos.add(
@@ -857,6 +1062,7 @@ def buscar_mercado_livre(
         )
 
         if len(resultados) >= limite:
+
             break
 
     return resultados
@@ -899,11 +1105,7 @@ def status():
             ),
 
         "versao":
-            getattr(
-                Config,
-                "APP_VERSION",
-                "11.2.0",
-            ),
+            APP_VERSION,
 
         "nicho":
             NICHO,
@@ -932,9 +1134,7 @@ def status():
 )
 def auth_status():
 
-    token = (
-        token_mercado_livre()
-    )
+    token = token_mercado_livre()
 
     return jsonify({
 
@@ -957,6 +1157,9 @@ def auth_status():
 
         },
 
+        "nicho":
+            NICHO,
+
     })
 
 
@@ -970,9 +1173,7 @@ def auth_status():
 )
 def diagnostico():
 
-    token = (
-        token_mercado_livre()
-    )
+    token = token_mercado_livre()
 
     resultado_token = None
 
@@ -990,6 +1191,10 @@ def diagnostico():
 
     except Exception:
 
+        logger.exception(
+            "Erro obtendo estatísticas."
+        )
+
         estatisticas = {}
 
     return jsonify({
@@ -1005,11 +1210,7 @@ def diagnostico():
             ),
 
         "versao":
-            getattr(
-                Config,
-                "APP_VERSION",
-                "11.2.0",
-            ),
+            APP_VERSION,
 
         "nicho":
             NICHO,
@@ -1040,6 +1241,19 @@ def diagnostico():
 
         },
 
+        "filtro": {
+
+            "foco":
+                NICHO,
+
+            "termos":
+                TERMOS_FITNESS,
+
+            "bloqueados":
+                TERMOS_BLOQUEADOS,
+
+        },
+
         "database":
             estatisticas,
 
@@ -1059,13 +1273,45 @@ def diagnostico_ml():
     if not mercado_livre_configurado():
 
         return resposta_erro(
+
             "Mercado Livre não configurado.",
+
             503,
+
+            diagnostico={
+
+                "client_id":
+                    bool(
+                        getattr(
+                            Config,
+                            "ML_CLIENT_ID",
+                            "",
+                        )
+                    ),
+
+                "client_secret":
+                    bool(
+                        getattr(
+                            Config,
+                            "ML_CLIENT_SECRET",
+                            "",
+                        )
+                    ),
+
+                "redirect_uri":
+                    bool(
+                        getattr(
+                            Config,
+                            "ML_REDIRECT_URI",
+                            "",
+                        )
+                    ),
+
+            },
+
         )
 
-    resultado = (
-        testar_token_ml()
-    )
+    resultado = testar_token_ml()
 
     return jsonify({
 
@@ -1079,97 +1325,6 @@ def diagnostico_ml():
             resultado,
 
     })
-
-
-# ============================================================
-# CONSTRUIR CONSULTA
-# ============================================================
-
-def preparar_consulta(
-    consulta,
-):
-
-    consulta = (
-        str(consulta or "")
-        .strip()
-    )
-
-    if not consulta:
-
-        return (
-            "legging fitness feminina"
-        )
-
-    consulta_normalizada = (
-        texto_normalizado(
-            consulta
-        )
-    )
-
-    # Remove termos masculinos.
-    for termo in TERMOS_BLOQUEADOS:
-
-        consulta_normalizada = (
-            consulta_normalizada
-            .replace(
-                texto_normalizado(
-                    termo
-                ),
-                "",
-            )
-        )
-
-    consulta_normalizada = (
-        " ".join(
-            consulta_normalizada.split()
-        )
-    )
-
-    # --------------------------------------------------------
-    # GARANTE ROUPA FITNESS FEMININA
-    # --------------------------------------------------------
-
-    palavras_roupa = [
-        "legging",
-        "calca",
-        "top",
-        "cropped",
-        "conjunto",
-        "short",
-        "bermuda",
-        "regata",
-        "camiseta",
-        "blusa",
-        "macacao",
-    ]
-
-    tem_roupa = any(
-        palavra in consulta_normalizada
-        for palavra in palavras_roupa
-    )
-
-    if not tem_roupa:
-
-        consulta_normalizada = (
-            f"{consulta_normalizada} "
-            "roupa fitness feminina"
-        )
-
-    if "fitness" not in consulta_normalizada:
-
-        consulta_normalizada = (
-            f"{consulta_normalizada} fitness"
-        )
-
-    if "feminina" not in consulta_normalizada:
-
-        consulta_normalizada = (
-            f"{consulta_normalizada} feminina"
-        )
-
-    return " ".join(
-        consulta_normalizada.split()
-    )
 
 
 # ============================================================
@@ -1187,6 +1342,7 @@ def buscar():
             "produto",
             "",
         )
+        .strip()
     )
 
     limite = inteiro(
@@ -1205,23 +1361,82 @@ def buscar():
         ),
     )
 
-    consulta = preparar_consulta(
+    # --------------------------------------------------------
+    # CONSULTA PADRÃO
+    # --------------------------------------------------------
+
+    if not consulta_original:
+
+        consulta_original = (
+            "legging fitness feminina"
+        )
+
+    consulta = texto_normalizado(
         consulta_original
     )
 
     # --------------------------------------------------------
-    # CONFIG
+    # REMOVE TERMOS MASCULINOS
+    # --------------------------------------------------------
+
+    for termo in TERMOS_BLOQUEADOS:
+
+        consulta = consulta.replace(
+            texto_normalizado(
+                termo
+            ),
+            " ",
+        )
+
+    consulta = " ".join(
+        consulta.split()
+    )
+
+    # --------------------------------------------------------
+    # GARANTE O NICHO
+    # --------------------------------------------------------
+
+    if not any(
+
+        termo in consulta
+
+        for termo in TERMOS_VALIDOS
+
+    ):
+
+        consulta = (
+
+            f"{consulta} "
+            "fitness feminina"
+
+        )
+
+    # --------------------------------------------------------
+    # GARANTE FEMININO
+    # --------------------------------------------------------
+
+    if "feminina" not in consulta:
+
+        consulta += " feminina"
+
+    # --------------------------------------------------------
+    # CONFIGURAÇÃO
     # --------------------------------------------------------
 
     if not mercado_livre_configurado():
 
         return resposta_erro(
+
             "Mercado Livre não configurado.",
+
             503,
-            detalhe=(
+
+            orientacao=(
                 "Configure ML_CLIENT_ID, "
-                "ML_CLIENT_SECRET e ML_REDIRECT_URI."
+                "ML_CLIENT_SECRET e "
+                "ML_REDIRECT_URI."
             ),
+
         )
 
     # --------------------------------------------------------
@@ -1231,56 +1446,16 @@ def buscar():
     if not token_mercado_livre():
 
         return resposta_erro(
+
             "Mercado Livre não conectado.",
+
             401,
-            detalhe=(
+
+            orientacao=(
                 "Conecte o Mercado Livre "
                 "antes de realizar a busca."
             ),
-        )
 
-    # --------------------------------------------------------
-    # TESTE TOKEN
-    # --------------------------------------------------------
-
-    teste_token = (
-        testar_token_ml()
-    )
-
-    if not teste_token.get(
-        "ok"
-    ):
-
-        if teste_token.get(
-            "status"
-        ) == 403:
-
-            # CORREÇÃO IMPORTANTE:
-            # não usar mensagem= aqui.
-            return resposta_erro(
-                "Mercado Livre recusou o access_token.",
-                403,
-                diagnostico=teste_token,
-                detalhe=(
-                    "O OAuth terminou, mas o token "
-                    "não está autorizado pela API."
-                ),
-            )
-
-        if teste_token.get(
-            "status"
-        ) == 401:
-
-            return resposta_erro(
-                "Access token Mercado Livre inválido.",
-                401,
-                diagnostico=teste_token,
-            )
-
-        return resposta_erro(
-            "Não foi possível validar o token Mercado Livre.",
-            502,
-            diagnostico=teste_token,
         )
 
     # --------------------------------------------------------
@@ -1304,17 +1479,156 @@ def buscar():
         )
 
         return resposta_erro(
-            "Mercado Livre recusou a busca.",
-            403,
-            detalhe=str(exc),
+
+            "Mercado Livre recusou o access token.",
+
+            401,
+
             diagnostico={
-                "nicho": NICHO,
-                "consulta": consulta,
-                "acao": (
-                    "Verifique as permissões da aplicação "
-                    "e faça novamente o OAuth."
-                ),
+
+                "tipo":
+                    "token_nao_autorizado",
+
+                "mensagem":
+                    str(exc),
+
+                "acao":
+                    (
+                        "Abra /api/diagnostico/ml "
+                        "para verificar o token."
+                    ),
+
             },
+
+        )
+
+    except RuntimeError as exc:
+
+        status_code = getattr(
+            exc,
+            "status_code",
+            None,
+        )
+
+        payload = getattr(
+            exc,
+            "payload",
+            None,
+        )
+
+        logger.error(
+            "Mercado Livre recusou a busca: %s",
+            exc,
+        )
+
+        # ----------------------------------------------------
+        # 403
+        # ----------------------------------------------------
+
+        if status_code == 403:
+
+            return resposta_erro(
+
+                "Mercado Livre recusou a busca.",
+
+                403,
+
+                diagnostico={
+
+                    "http_status":
+                        403,
+
+                    "resposta_mercado_livre":
+                        payload,
+
+                    "possiveis_causas": [
+
+                        "Permissões/scopes",
+
+                        "Access token de usuário incorreto",
+
+                        "Usuário inativo ou suspenso",
+
+                        "IP não permitido",
+
+                        "Aplicação bloqueada ou desabilitada",
+
+                    ],
+
+                    "proximo_passo":
+                        (
+                            "Abra /api/diagnostico/ml "
+                            "e veja o resultado de /users/me."
+                        ),
+
+                },
+
+            )
+
+        # ----------------------------------------------------
+        # 429
+        # ----------------------------------------------------
+
+        if status_code == 429:
+
+            return resposta_erro(
+
+                "Mercado Livre limitou temporariamente as requisições.",
+
+                429,
+
+                diagnostico={
+
+                    "http_status":
+                        429,
+
+                    "mensagem":
+                        str(exc),
+
+                },
+
+            )
+
+        # ----------------------------------------------------
+        # OUTROS
+        # ----------------------------------------------------
+
+        return resposta_erro(
+
+            "Erro retornado pelo Mercado Livre.",
+
+            502,
+
+            diagnostico={
+
+                "http_status":
+                    status_code,
+
+                "mensagem":
+                    str(exc),
+
+                "resposta":
+                    payload,
+
+            },
+
+        )
+
+    except ConnectionError as exc:
+
+        logger.error(
+            "Erro de conexão: %s",
+            exc,
+        )
+
+        return resposta_erro(
+
+            "Erro de conexão com Mercado Livre.",
+
+            502,
+
+            detalhe=str(exc),
+
         )
 
     except Exception as exc:
@@ -1324,10 +1638,18 @@ def buscar():
         )
 
         return resposta_erro(
-            "Erro ao buscar produtos.",
-            502,
+
+            "Erro interno ao buscar produtos.",
+
+            500,
+
             detalhe=str(exc),
+
         )
+
+    # --------------------------------------------------------
+    # RESPOSTA
+    # --------------------------------------------------------
 
     return jsonify({
 
@@ -1378,43 +1700,35 @@ def buscar_fitness():
         ),
     )
 
-    consultas = [
-        "legging fitness feminina",
-        "conjunto fitness feminino",
-        "top academia feminino",
-        "short fitness feminino",
-        "cropped fitness feminino",
-    ]
-
-    if not mercado_livre_configurado():
-
-        return resposta_erro(
-            "Mercado Livre não configurado.",
-            503,
-        )
-
     if not token_mercado_livre():
 
         return resposta_erro(
+
             "Mercado Livre não conectado.",
+
             401,
+
         )
 
-    teste = (
-        testar_token_ml()
-    )
+    consultas = [
 
-    if not teste.get(
-        "ok"
-    ):
+        "legging fitness feminina",
 
-        return resposta_erro(
-            "Token do Mercado Livre não autorizado.",
-            teste.get(
-                "status"
-            ) or 502,
-            diagnostico=teste,
-        )
+        "conjunto fitness feminino",
+
+        "top academia feminino",
+
+        "short fitness feminino",
+
+        "cropped fitness feminino",
+
+        "calca legging feminina",
+
+        "bermuda fitness feminina",
+
+        "macacao fitness feminino",
+
+    ]
 
     resultados = []
 
@@ -1424,33 +1738,42 @@ def buscar_fitness():
 
         for consulta in consultas:
 
-            quantidade_restante = (
-                limite - len(resultados)
+            restantes = (
+                limite
+                -
+                len(resultados)
             )
 
-            if quantidade_restante <= 0:
+            if restantes <= 0:
+
                 break
+
+            quantidade = min(
+                restantes,
+                20,
+            )
 
             produtos = (
                 buscar_mercado_livre(
                     consulta,
-                    min(
-                        quantidade_restante,
-                        20,
-                    ),
+                    quantidade,
                 )
             )
 
             for produto in produtos:
 
                 produto_id = (
-                    produto.get("id")
+                    produto.get(
+                        "id"
+                    )
                 )
 
                 if not produto_id:
+
                     continue
 
                 if produto_id in vistos:
+
                     continue
 
                 vistos.add(
@@ -1462,20 +1785,59 @@ def buscar_fitness():
                 )
 
                 if len(resultados) >= limite:
+
                     break
 
-    except PermissionError as exc:
+    except RuntimeError as exc:
+
+        status_code = getattr(
+            exc,
+            "status_code",
+            None,
+        )
+
+        payload = getattr(
+            exc,
+            "payload",
+            None,
+        )
 
         logger.error(
-            "Mercado Livre recusou a busca fitness: %s",
+            "Erro na busca fitness feminina: %s",
             exc,
         )
 
+        if status_code == 403:
+
+            return resposta_erro(
+
+                "Mercado Livre recusou a busca.",
+
+                403,
+
+                diagnostico={
+
+                    "http_status":
+                        403,
+
+                    "resposta_mercado_livre":
+                        payload,
+
+                    "nicho":
+                        NICHO,
+
+                },
+
+            )
+
         return resposta_erro(
-            "Mercado Livre recusou a busca.",
-            403,
+
+            "Erro buscando roupas fitness femininas.",
+
+            502,
+
             detalhe=str(exc),
-            diagnostico=teste,
+
         )
 
     except Exception as exc:
@@ -1485,9 +1847,13 @@ def buscar_fitness():
         )
 
         return resposta_erro(
+
             "Erro buscando roupas fitness femininas.",
-            502,
+
+            500,
+
             detalhe=str(exc),
+
         )
 
     return jsonify({
@@ -1539,10 +1905,13 @@ def ofertas():
     try:
 
         dados = db.buscar_ofertas(
+
             limite=limite,
+
             status=request.args.get(
                 "status"
             ),
+
         )
 
     except Exception as exc:
@@ -1552,9 +1921,13 @@ def ofertas():
         )
 
         return resposta_erro(
+
             "Erro ao buscar ofertas.",
+
             500,
+
             detalhe=str(exc),
+
         )
 
     return jsonify({
@@ -1610,9 +1983,13 @@ def publicacoes():
         )
 
         return resposta_erro(
+
             "Erro ao buscar publicações.",
+
             500,
+
             detalhe=str(exc),
+
         )
 
     return jsonify({
@@ -1654,11 +2031,7 @@ def obter_config():
                 ),
 
             "versao":
-                getattr(
-                    Config,
-                    "APP_VERSION",
-                    "11.2.0",
-                ),
+                APP_VERSION,
 
             "nicho":
                 NICHO,
@@ -1701,11 +2074,7 @@ def health():
             ),
 
         "version":
-            getattr(
-                Config,
-                "APP_VERSION",
-                "11.2.0",
-            ),
+            APP_VERSION,
 
         "nicho":
             NICHO,
