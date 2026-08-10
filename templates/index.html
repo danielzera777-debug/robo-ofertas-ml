@@ -1,79 +1,113 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
+
     <meta charset="UTF-8">
+
     <meta
         name="viewport"
         content="width=device-width, initial-scale=1.0"
     >
+
     <meta
         name="theme-color"
         content="#007aff"
     >
+
     <meta
         name="apple-mobile-web-app-capable"
         content="yes"
     >
+
     <meta
         name="apple-mobile-web-app-title"
         content="Robô de Ofertas"
     >
+
     <title>Robô de Ofertas</title>
+
     <link
         rel="manifest"
         href="/static/manifest.json"
     >
+
     <link
         rel="stylesheet"
         href="/static/style.css"
     >
+
 </head>
+
 <body>
+
 <main class="app">
+
+    <!-- =====================================================
+         CABEÇALHO
+    ====================================================== -->
+
     <header>
+
         <h1>
             🤖 Robô de Ofertas
         </h1>
+
         <p>
             Encontre ofertas do Mercado Livre
         </p>
+
     </header>
+
+
     <!-- =====================================================
          CONEXÃO MERCADO LIVRE
     ====================================================== -->
+
     <section class="conexao">
-        {% if conectado %}
-            <div class="status conectado">
-                🟢 Mercado Livre conectado
-            </div>
-            <a
-                class="botao"
-                href="/logout"
-            >
-                Desconectar
-            </a>
-        {% else %}
-            <div class="status desconectado">
-                🔴 Mercado Livre não conectado
-            </div>
-            <a
-                class="botao conectar"
-                href="/login"
-            >
-                🔗 Conectar Mercado Livre
-            </a>
-        {% endif %}
+
+        <div
+            id="statusMercadoLivre"
+            class="status desconectado"
+        >
+            ⏳ Verificando conexão...
+        </div>
+
+
+        <a
+            id="botaoConectar"
+            class="botao conectar"
+            href="/auth/mercadolivre"
+        >
+            🔗 Conectar Mercado Livre
+        </a>
+
+
+        <a
+            id="botaoDesconectar"
+            class="botao"
+            href="/auth/mercadolivre/logout"
+            style="display:none;"
+        >
+            🔓 Desconectar
+        </a>
+
     </section>
+
+
     <!-- =====================================================
          BUSCA
     ====================================================== -->
+
     <section class="busca">
+
         <input
             id="produto"
             type="search"
             placeholder="Digite um produto..."
             autocomplete="off"
         >
+
         <button
             id="botaoBuscar"
             type="button"
@@ -81,73 +115,210 @@
         >
             🔎 Buscar
         </button>
+
     </section>
+
+
     <div id="status"></div>
+
+
     <section
         id="resultado"
         class="resultado"
     ></section>
+
 </main>
+
+
 <script>
+
+
 // ============================================================
 // SERVICE WORKER
 // ============================================================
+
 if (
     "serviceWorker"
     in navigator
 ) {
+
     window.addEventListener(
         "load",
         function() {
+
             navigator.serviceWorker
                 .register(
                     "/static/service-worker.js"
                 )
                 .catch(
                     function(erro) {
+
                         console.log(
                             "Service Worker:",
                             erro
                         );
+
                     }
                 );
+
         }
     );
+
 }
+
+
+// ============================================================
+// VERIFICAR MERCADO LIVRE
+// ============================================================
+
+async function verificarMercadoLivre() {
+
+    const status =
+        document.getElementById(
+            "statusMercadoLivre"
+        );
+
+    const conectar =
+        document.getElementById(
+            "botaoConectar"
+        );
+
+    const desconectar =
+        document.getElementById(
+            "botaoDesconectar"
+        );
+
+    try {
+
+        const resposta =
+            await fetch(
+                "/api/auth/status",
+                {
+                    method: "GET",
+                    credentials: "same-origin"
+                }
+            );
+
+
+        const dados =
+            await resposta.json();
+
+
+        if (
+            dados
+            &&
+            dados.conectado
+        ) {
+
+            status.className =
+                "status conectado";
+
+            status.innerHTML =
+                "🟢 Mercado Livre conectado";
+
+            conectar.style.display =
+                "none";
+
+            desconectar.style.display =
+                "inline-block";
+
+        }
+        else {
+
+            status.className =
+                "status desconectado";
+
+            status.innerHTML =
+                "🔴 Mercado Livre não conectado";
+
+            conectar.style.display =
+                "inline-block";
+
+            desconectar.style.display =
+                "none";
+
+        }
+
+    }
+    catch (erro) {
+
+        console.error(
+            "Erro verificando Mercado Livre:",
+            erro
+        );
+
+        status.className =
+            "status desconectado";
+
+        status.innerHTML =
+            "⚠️ Não foi possível verificar a conexão";
+
+        conectar.style.display =
+            "inline-block";
+
+        desconectar.style.display =
+            "none";
+
+    }
+
+}
+
+
 // ============================================================
 // BUSCAR
 // ============================================================
+
 async function buscar() {
+
     const campo =
         document.getElementById(
             "produto"
         );
+
     const botao =
         document.getElementById(
             "botaoBuscar"
         );
+
     const status =
         document.getElementById(
             "status"
         );
+
     const resultado =
         document.getElementById(
             "resultado"
         );
+
     const termo =
         campo.value.trim();
+
+
     if (!termo) {
+
         status.innerHTML =
             "⚠️ Digite um produto.";
+
         return;
+
     }
-    botao.disabled = true;
+
+
+    botao.disabled =
+        true;
+
     botao.innerText =
         "🔎 Buscando...";
-    resultado.innerHTML = "";
+
+    resultado.innerHTML =
+        "";
+
     status.innerHTML =
         "⏳ Procurando ofertas...";
+
+
     try {
+
         const resposta =
             await fetch(
                 "/api/buscar?produto="
@@ -156,17 +327,42 @@ async function buscar() {
                     termo
                 )
                 +
-                "&limite=20"
+                "&limite=20",
+                {
+                    method: "GET",
+                    credentials: "same-origin"
+                }
             );
-        const dados =
-            await resposta.json();
+
+
+        let dados = {};
+
+        try {
+
+            dados =
+                await resposta.json();
+
+        }
+        catch {
+
+            dados = {};
+
+        }
+
+
         if (!resposta.ok) {
+
             throw new Error(
                 dados.mensagem
                 ||
+                dados.erro
+                ||
                 "Erro na busca."
             );
+
         }
+
+
         const produtos =
             Array.isArray(
                 dados.produtos
@@ -175,9 +371,12 @@ async function buscar() {
             dados.produtos
             :
             [];
+
+
         if (
             produtos.length === 0
         ) {
+
             status.innerHTML =
                 "❌ Nenhuma oferta encontrada para <b>"
                 +
@@ -186,84 +385,133 @@ async function buscar() {
                 )
                 +
                 "</b>.";
+
             return;
+
         }
+
+
         status.innerHTML =
             "✅ "
             +
             produtos.length
             +
             " ofertas encontradas.";
+
+
         produtos.forEach(
             function(produto) {
+
                 criarCard(
                     produto,
                     resultado
                 );
+
             }
         );
+
     }
     catch (erro) {
+
         console.error(
             erro
         );
+
         status.innerHTML =
             "❌ Erro: "
             +
             escapar(
                 erro.message
             );
+
     }
     finally {
-        botao.disabled = false;
+
+        botao.disabled =
+            false;
+
         botao.innerText =
             "🔎 Buscar";
+
     }
+
 }
+
+
 // ============================================================
 // CARD DO PRODUTO
 // ============================================================
+
 function criarCard(
     produto,
     area
 ) {
+
     const card =
         document.createElement(
             "article"
         );
+
     card.className =
         "produto";
+
+
     const titulo =
         produto.titulo
         ||
+        produto.title
+        ||
         "Produto";
+
+
     const imagem =
         produto.imagem
         ||
+        produto.thumbnail
+        ||
         "";
+
+
     const preco =
         produto.preco_formatado
         ||
         formatarPreco(
             produto.preco
+            ||
+            produto.price
         );
+
+
     const revenda =
         produto.revenda_formatada
         ||
+        produto.preco_revenda_formatado
+        ||
         formatarPreco(
             produto.revenda
+            ||
+            produto.preco_revenda
         );
+
+
     const lucro =
         produto.lucro_formatado
         ||
         formatarPreco(
             produto.lucro
         );
+
+
     const link =
         produto.link
         ||
+        produto.permalink
+        ||
         "#";
+
+
     card.innerHTML = `
+
         ${
             imagem
             ?
@@ -277,27 +525,48 @@ function criarCard(
             :
             ""
         }
+
         <h2>
             ${escapar(titulo)}
         </h2>
+
         <p>
             💰 Preço:
             <strong>
                 ${escapar(preco)}
             </strong>
         </p>
-        <p>
-            🏷️ Revenda:
-            <strong>
-                ${escapar(revenda)}
-            </strong>
-        </p>
-        <p>
-            📈 Lucro estimado:
-            <strong>
-                ${escapar(lucro)}
-            </strong>
-        </p>
+
+        ${
+            revenda !== "R$ 0,00"
+            ?
+            `
+            <p>
+                🏷️ Revenda:
+                <strong>
+                    ${escapar(revenda)}
+                </strong>
+            </p>
+            `
+            :
+            ""
+        }
+
+        ${
+            lucro !== "R$ 0,00"
+            ?
+            `
+            <p>
+                📈 Lucro estimado:
+                <strong>
+                    ${escapar(lucro)}
+                </strong>
+            </p>
+            `
+            :
+            ""
+        }
+
         <a
             class="produto-link"
             href="${escapar(link)}"
@@ -306,67 +575,113 @@ function criarCard(
         >
             🛒 Ver produto
         </a>
+
         <button
             type="button"
             class="compartilhar"
         >
             📲 Compartilhar
         </button>
+
     `;
+
+
     const compartilharBotao =
         card.querySelector(
             ".compartilhar"
         );
+
+
     compartilharBotao.addEventListener(
         "click",
         function() {
+
             compartilhar(
                 titulo,
                 link
             );
+
         }
     );
+
+
     area.appendChild(
         card
     );
+
 }
+
+
 // ============================================================
 // COMPARTILHAR
 // ============================================================
+
 async function compartilhar(
     titulo,
     link
 ) {
+
     try {
+
         if (
             navigator.share
         ) {
+
             await navigator.share({
+
                 title:
                     titulo,
+
                 text:
                     "🔥 Confira esta oferta!",
+
                 url:
                     link
+
             });
+
             return;
+
         }
-        await navigator.clipboard.writeText(
-            link
-        );
+
+
+        if (
+            navigator.clipboard
+        ) {
+
+            await navigator.clipboard.writeText(
+                link
+            );
+
+            alert(
+                "Link copiado!"
+            );
+
+            return;
+
+        }
+
+
         alert(
-            "Link copiado!"
+            "Não foi possível copiar o link."
         );
+
     }
     catch (erro) {
+
         console.log(
             erro
         );
+
     }
+
 }
+
+
 // ============================================================
 // ENTER
 // ============================================================
+
 document
     .getElementById(
         "produto"
@@ -374,61 +689,113 @@ document
     .addEventListener(
         "keydown",
         function(event) {
+
             if (
                 event.key === "Enter"
             ) {
+
                 buscar();
+
             }
+
         }
     );
+
+
 // ============================================================
-// FORMATAÇÃO
+// FORMATAÇÃO DE PREÇO
 // ============================================================
+
 function formatarPreco(
     valor
 ) {
-    return Number(
-        valor || 0
-    ).toLocaleString(
+
+    const numero =
+        Number(
+            valor || 0
+        );
+
+
+    if (
+        !Number.isFinite(
+            numero
+        )
+    ) {
+
+        return "R$ 0,00";
+
+    }
+
+
+    return numero.toLocaleString(
         "pt-BR",
         {
             style:
                 "currency",
+
             currency:
                 "BRL"
         }
     );
+
 }
+
+
 // ============================================================
-// SEGURANÇA
+// ESCAPAR HTML
 // ============================================================
+
 function escapar(
     valor
 ) {
+
     return String(
         valor || ""
     )
+
     .replace(
         /&/g,
         "&amp;"
     )
+
     .replace(
         /</g,
         "&lt;"
     )
+
     .replace(
         />/g,
         "&gt;"
     )
+
     .replace(
         /"/g,
         "&quot;"
     )
+
     .replace(
         /'/g,
         "&#039;"
     );
+
 }
+
+
+// ============================================================
+// INICIALIZAÇÃO
+// ============================================================
+
+document.addEventListener(
+    "DOMContentLoaded",
+    function() {
+
+        verificarMercadoLivre();
+
+    }
+);
+
 </script>
+
 </body>
+
 </html>
