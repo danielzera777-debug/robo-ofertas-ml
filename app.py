@@ -2,19 +2,10 @@
 Robo Ofertas PRO
 ================
 
-Núcleo principal da aplicação Flask.
+Aplicação principal Flask.
 
-Responsabilidades:
-- criar a aplicação Flask;
-- carregar configurações;
-- inicializar extensões;
-- registrar rotas;
-- registrar autenticação do Mercado Livre;
-- configurar segurança;
-- disponibilizar health check;
-- disponibilizar diagnóstico;
-- tratar erros;
-- iniciar o servidor local quando executado diretamente.
+Esta versão foi ajustada para o projeto atual, onde
+"routes.py" é um arquivo e NÃO uma pasta "routes/".
 """
 
 from __future__ import annotations
@@ -34,12 +25,6 @@ from flask import (
 from config import get_config
 from extensions import init_extensions
 
-# ============================================================
-# AUTENTICAÇÃO MERCADO LIVRE
-# ============================================================
-
-from routes.auth import register_auth_routes
-
 
 # ============================================================
 # CONSTANTES
@@ -47,21 +32,14 @@ from routes.auth import register_auth_routes
 
 LOGGER_NAME = "robo-ofertas"
 
-BASE_DIR = Path(
-    __file__
-).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent
 
 
 # ============================================================
 # LOGGING
 # ============================================================
 
-def configure_logging(
-    app: Flask,
-) -> None:
-    """
-    Configura o sistema de logs.
-    """
+def configure_logging(app: Flask) -> None:
 
     level_name = app.config.get(
         "LOG_LEVEL",
@@ -85,9 +63,7 @@ def configure_logging(
         LOGGER_NAME
     )
 
-    logger.setLevel(
-        level
-    )
+    logger.setLevel(level)
 
     if not logger.handlers:
 
@@ -115,9 +91,6 @@ def configure_logging(
 # ============================================================
 
 def ensure_directories() -> None:
-    """
-    Garante que os diretórios básicos existam.
-    """
 
     directories = [
 
@@ -150,15 +123,12 @@ def ensure_directories() -> None:
 
 
 # ============================================================
-# HEADERS DE SEGURANÇA
+# SEGURANÇA
 # ============================================================
 
 def register_security_headers(
     app: Flask,
 ) -> None:
-    """
-    Adiciona headers básicos de segurança.
-    """
 
     if not app.config.get(
         "SECURITY_HEADERS_ENABLED",
@@ -167,9 +137,7 @@ def register_security_headers(
         return
 
     @app.after_request
-    def security_headers(
-        response
-    ):
+    def security_headers(response):
 
         response.headers.setdefault(
             "X-Content-Type-Options",
@@ -218,9 +186,6 @@ def register_security_headers(
 def register_request_tracking(
     app: Flask,
 ) -> None:
-    """
-    Registra tempo básico das requisições.
-    """
 
     @app.before_request
     def request_started():
@@ -230,9 +195,7 @@ def register_request_tracking(
         )
 
     @app.after_request
-    def request_finished(
-        response
-    ):
+    def request_finished(response):
 
         started = getattr(
             request,
@@ -243,9 +206,7 @@ def register_request_tracking(
         if started is not None:
 
             duration = (
-                time.time()
-                -
-                started
+                time.time() - started
             )
 
             response.headers.setdefault(
@@ -263,14 +224,8 @@ def register_request_tracking(
 def register_core_routes(
     app: Flask,
 ) -> None:
-    """
-    Registra as rotas básicas da aplicação.
-    """
 
-    @app.route(
-        "/",
-        methods=["GET"],
-    )
+    @app.route("/")
     def home():
 
         connected = False
@@ -304,46 +259,37 @@ def register_core_routes(
                 ),
             )
 
-        except Exception as exc:
+        except Exception as error:
 
             logging.getLogger(
                 LOGGER_NAME
             ).exception(
                 "Erro carregando index.html: %s",
-                exc,
+                error,
             )
 
             return jsonify(
-
                 ok=True,
-
                 app=app.config.get(
                     "APP_NAME",
                     "Robo Ofertas PRO",
                 ),
-
                 version=app.config.get(
                     "APP_VERSION",
                     "10.0.0",
                 ),
-
                 status="online",
-
                 mensagem=(
                     "Aplicação funcionando."
                 ),
-
             )
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # HEALTH
-    # ========================================================
+    # --------------------------------------------------------
 
-    @app.route(
-        "/health",
-        methods=["GET"],
-    )
+    @app.route("/health")
     def health():
 
         return jsonify(
@@ -374,37 +320,11 @@ def register_core_routes(
         )
 
 
-    # ========================================================
-    # PING
-    # ========================================================
+    # --------------------------------------------------------
+    # STATUS
+    # --------------------------------------------------------
 
-    @app.route(
-        "/api/ping",
-        methods=["GET"],
-    )
-    def api_ping():
-
-        return jsonify(
-
-            ok=True,
-
-            message="pong",
-
-            timestamp=int(
-                time.time()
-            ),
-
-        )
-
-
-    # ========================================================
-    # STATUS GERAL
-    # ========================================================
-
-    @app.route(
-        "/api/status",
-        methods=["GET"],
-    )
+    @app.route("/api/status")
     def api_status():
 
         config_class = app.config.get(
@@ -449,25 +369,8 @@ def register_core_routes(
         else:
 
             ml_configured = False
-
             ml_summary = {}
-
             security_summary = {}
-
-
-        try:
-
-            from flask import session
-
-            connected = bool(
-                session.get(
-                    "access_token"
-                )
-            )
-
-        except Exception:
-
-            connected = False
 
 
         return jsonify(
@@ -476,23 +379,20 @@ def register_core_routes(
 
             application={
 
-                "name":
-                    app.config.get(
-                        "APP_NAME",
-                        "Robo Ofertas PRO",
-                    ),
+                "name": app.config.get(
+                    "APP_NAME",
+                    "Robo Ofertas PRO",
+                ),
 
-                "version":
-                    app.config.get(
-                        "APP_VERSION",
-                        "10.0.0",
-                    ),
+                "version": app.config.get(
+                    "APP_VERSION",
+                    "10.0.0",
+                ),
 
-                "environment":
-                    app.config.get(
-                        "ENVIRONMENT",
-                        "production",
-                    ),
+                "environment": app.config.get(
+                    "ENVIRONMENT",
+                    "production",
+                ),
 
             },
 
@@ -500,9 +400,6 @@ def register_core_routes(
 
                 "configured":
                     ml_configured,
-
-                "connected":
-                    connected,
 
                 **ml_summary,
 
@@ -514,96 +411,270 @@ def register_core_routes(
         )
 
 
+    # --------------------------------------------------------
+    # PING
+    # --------------------------------------------------------
+
+    @app.route("/api/ping")
+    def api_ping():
+
+        return jsonify(
+
+            ok=True,
+
+            message="pong",
+
+            timestamp=int(
+                time.time()
+            ),
+
+        )
+
+
 # ============================================================
-# ROTAS FUTURAS
+# AUTENTICAÇÃO MERCADO LIVRE
 # ============================================================
 
-def register_future_routes(
+def register_auth_routes(
     app: Flask,
 ) -> None:
-    """
-    Registra módulos adicionais quando disponíveis.
 
-    O módulo de autenticação NÃO é carregado aqui.
-    Ele é registrado diretamente em create_app().
-    """
-
-    modules = [
-
-        (
-            "routes.produtos",
-            "register_product_routes",
-        ),
-
-        (
-            "routes.diagnostico",
-            "register_diagnostic_routes",
-        ),
-
-        (
-            "routes.whatsapp",
-            "register_whatsapp_routes",
-        ),
-
-        (
-            "routes.admin",
-            "register_admin_routes",
-        ),
-
-    ]
+    from flask import redirect
+    from flask import session
+    from urllib.parse import urlencode
 
     logger = logging.getLogger(
         LOGGER_NAME
     )
 
-    for module_name, function_name in modules:
 
-        try:
+    # --------------------------------------------------------
+    # STATUS AUTH
+    # --------------------------------------------------------
 
-            module = __import__(
-                module_name,
-                fromlist=[
-                    function_name
-                ],
-            )
+    @app.route(
+        "/api/auth/status",
+        methods=["GET"],
+    )
+    def auth_status():
 
-            register_function = getattr(
-                module,
-                function_name,
-            )
+        token = session.get(
+            "access_token"
+        )
 
-            register_function(
-                app
-            )
+        return jsonify({
 
-            logger.info(
-                "Módulo carregado: %s",
-                module_name,
-            )
+            "sucesso": True,
 
-        except ModuleNotFoundError:
+            "conectado": bool(
+                token
+            ),
 
-            logger.debug(
-                "Módulo ainda não criado: %s",
-                module_name,
-            )
+            "mercado_livre": bool(
+                token
+            ),
 
-        except AttributeError:
+        })
+
+
+    # --------------------------------------------------------
+    # LOGIN MERCADO LIVRE
+    # --------------------------------------------------------
+
+    @app.route(
+        "/auth/mercadolivre",
+        methods=["GET"],
+    )
+    @app.route(
+        "/login",
+        methods=["GET"],
+    )
+    def auth_mercadolivre():
+
+        client_id = app.config.get(
+            "ML_CLIENT_ID",
+            "",
+        )
+
+        redirect_uri = app.config.get(
+            "ML_REDIRECT_URI",
+            "",
+        )
+
+        auth_url = app.config.get(
+            "ML_AUTH_URL",
+            "https://auth.mercadolivre.com.br/authorization",
+        )
+
+        if not client_id:
+
+            return jsonify({
+
+                "sucesso": False,
+
+                "erro":
+                    "ML_CLIENT_ID não configurado.",
+
+                "mensagem":
+                    (
+                        "Configure ML_CLIENT_ID "
+                        "nas variáveis de ambiente "
+                        "do Render."
+                    ),
+
+            }), 500
+
+
+        if not redirect_uri:
+
+            return jsonify({
+
+                "sucesso": False,
+
+                "erro":
+                    "ML_REDIRECT_URI não configurado.",
+
+                "mensagem":
+                    (
+                        "Configure ML_REDIRECT_URI "
+                        "nas variáveis de ambiente "
+                        "do Render."
+                    ),
+
+            }), 500
+
+
+        params = {
+
+            "response_type":
+                "code",
+
+            "client_id":
+                client_id,
+
+            "redirect_uri":
+                redirect_uri,
+
+        }
+
+        url = (
+            auth_url
+            +
+            "?"
+            +
+            urlencode(params)
+        )
+
+        logger.info(
+            "Iniciando autenticação Mercado Livre."
+        )
+
+        return redirect(
+            url
+        )
+
+
+    # --------------------------------------------------------
+    # LOGOUT
+    # --------------------------------------------------------
+
+    @app.route(
+        "/logout",
+        methods=["GET"],
+    )
+    def logout():
+
+        session.pop(
+            "access_token",
+            None,
+        )
+
+        session.pop(
+            "refresh_token",
+            None,
+        )
+
+        session.pop(
+            "user_id",
+            None,
+        )
+
+        return redirect(
+            "/"
+        )
+
+
+# ============================================================
+# REGISTRAR ROTAS DO routes.py
+# ============================================================
+
+def register_existing_routes(
+    app: Flask,
+) -> None:
+    """
+    O projeto atual possui routes.py como ARQUIVO.
+
+    Portanto NÃO fazemos:
+
+        from routes.auth import ...
+
+    e NÃO fazemos:
+
+        import routes.auth
+
+    Aqui carregamos somente o blueprint existente
+    dentro de routes.py.
+    """
+
+    logger = logging.getLogger(
+        LOGGER_NAME
+    )
+
+    try:
+
+        import routes as routes_module
+
+        blueprint = getattr(
+            routes_module,
+            "routes",
+            None,
+        )
+
+        if blueprint is None:
 
             logger.warning(
-                "Função %s não encontrada em %s.",
-                function_name,
-                module_name,
+                "routes.py encontrado, "
+                "mas o blueprint 'routes' não existe."
             )
 
-        except Exception:
+            return
 
-            logger.exception(
-                "Erro carregando módulo %s.",
-                module_name,
-            )
+        app.register_blueprint(
+            blueprint
+        )
 
-            raise
+        logger.info(
+            "Blueprint routes.py registrado."
+        )
+
+    except ModuleNotFoundError:
+
+        logger.warning(
+            "routes.py não encontrado. "
+            "A aplicação continuará funcionando "
+            "com as rotas principais."
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Erro ao registrar routes.py."
+        )
+
+        # Não derruba o servidor durante o boot.
+        # O objetivo é permitir que o Render
+        # continue online enquanto corrigimos
+        # módulos individuais.
 
 
 # ============================================================
@@ -627,43 +698,28 @@ def register_error_handlers(
 
                 erro="not_found",
 
-                mensagem=(
-                    "Rota não encontrada."
-                ),
+                mensagem=
+                    "Rota não encontrada.",
 
                 rota=request.path,
 
             ), 404
 
-
         return (
 
             "<!doctype html>"
-
             "<html lang='pt-BR'>"
-
             "<head>"
-
             "<meta charset='utf-8'>"
-
             "<meta name='viewport' "
-            "content='width=device-width, "
-            "initial-scale=1.0'>"
-
+            "content='width=device-width,initial-scale=1'>"
             "<title>Não encontrado</title>"
-
             "</head>"
-
             "<body>"
-
             "<h1>404</h1>"
-
             "<p>Rota não encontrada.</p>"
-
             "<a href='/'>Voltar</a>"
-
             "</body>"
-
             "</html>",
 
             404,
@@ -682,18 +738,19 @@ def register_error_handlers(
 
                 ok=False,
 
-                erro="method_not_allowed",
+                erro=
+                    "method_not_allowed",
 
-                mensagem=(
-                    "Método HTTP não permitido."
-                ),
+                mensagem=
+                    "Método HTTP não permitido.",
 
-                metodo=request.method,
+                metodo=
+                    request.method,
 
-                rota=request.path,
+                rota=
+                    request.path,
 
             ), 405
-
 
         return (
             "Método HTTP não permitido.",
@@ -720,41 +777,29 @@ def register_error_handlers(
 
                 ok=False,
 
-                erro="internal_server_error",
+                erro=
+                    "internal_server_error",
 
-                mensagem=(
-                    "Erro interno do servidor."
-                ),
+                mensagem=
+                    "Erro interno do servidor.",
 
             ), 500
-
 
         return (
 
             "<!doctype html>"
-
             "<html lang='pt-BR'>"
-
             "<head>"
-
             "<meta charset='utf-8'>"
-
             "<title>Erro interno</title>"
-
             "</head>"
-
             "<body>"
-
             "<h1>Erro interno</h1>"
-
             "<p>"
             "O servidor encontrou um problema."
             "</p>"
-
             "<a href='/'>Voltar</a>"
-
             "</body>"
-
             "</html>",
 
             500,
@@ -769,15 +814,15 @@ def register_error_handlers(
 def configure_session(
     app: Flask,
 ) -> None:
-    """
-    Configura os cookies da sessão.
-    """
 
     app.config[
         "SESSION_COOKIE_NAME"
     ] = app.config.get(
+
         "SESSION_COOKIE_NAME",
+
         "robo_ofertas_session",
+
     )
 
     app.config[
@@ -787,22 +832,31 @@ def configure_session(
     app.config[
         "SESSION_COOKIE_SAMESITE"
     ] = app.config.get(
+
         "SESSION_COOKIE_SAMESITE",
+
         "Lax",
+
     )
 
     app.config[
         "SESSION_COOKIE_SECURE"
     ] = app.config.get(
+
         "SESSION_COOKIE_SECURE",
+
         True,
+
     )
 
     app.config[
         "PERMANENT_SESSION_LIFETIME"
     ] = app.config.get(
+
         "PERMANENT_SESSION_LIFETIME",
+
         86400,
+
     )
 
 
@@ -813,74 +867,32 @@ def configure_session(
 def create_app(
     config_class=None,
 ) -> Flask:
-    """
-    Cria e configura a aplicação Flask.
-    """
 
     ensure_directories()
-
-
-    # --------------------------------------------------------
-    # CONFIGURAÇÃO
-    # --------------------------------------------------------
 
     if config_class is None:
 
         config_class = get_config()
-
 
     app = Flask(
         __name__,
         instance_relative_config=True,
     )
 
+    # --------------------------------------------------------
+    # CONFIGURAÇÃO
+    # --------------------------------------------------------
 
     app.config.from_object(
         config_class
     )
 
-
-    # --------------------------------------------------------
-    # GARANTIAS DE CONFIGURAÇÃO
-    # --------------------------------------------------------
-
-    if not app.config.get(
-        "APP_NAME"
-    ):
-
-        app.config[
-            "APP_NAME"
-        ] = "Robo Ofertas PRO"
-
-
-    if not app.config.get(
-        "APP_VERSION"
-    ):
-
-        app.config[
-            "APP_VERSION"
-        ] = "10.0.0"
-
-
-    if not app.config.get(
-        "ENVIRONMENT"
-    ):
-
-        app.config[
-            "ENVIRONMENT"
-        ] = "production"
-
-
-    # Guarda a classe de configuração
-    # para os endpoints de diagnóstico.
-
     app.config[
         "_ROBO_CONFIG_CLASS"
     ] = config_class
 
-
     # --------------------------------------------------------
-    # LOGGING
+    # LOG
     # --------------------------------------------------------
 
     configure_logging(
@@ -891,17 +903,17 @@ def create_app(
         LOGGER_NAME
     )
 
-
     logger.info(
         "Criando %s v%s",
         app.config.get(
-            "APP_NAME"
+            "APP_NAME",
+            "Robo Ofertas PRO",
         ),
         app.config.get(
-            "APP_VERSION"
+            "APP_VERSION",
+            "10.0.0",
         ),
     )
-
 
     # --------------------------------------------------------
     # SESSÃO
@@ -911,7 +923,6 @@ def create_app(
         app
     )
 
-
     # --------------------------------------------------------
     # EXTENSÕES
     # --------------------------------------------------------
@@ -919,7 +930,6 @@ def create_app(
     init_extensions(
         app
     )
-
 
     # --------------------------------------------------------
     # SEGURANÇA
@@ -933,7 +943,6 @@ def create_app(
         app
     )
 
-
     # --------------------------------------------------------
     # ROTAS PRINCIPAIS
     # --------------------------------------------------------
@@ -942,95 +951,50 @@ def create_app(
         app
     )
 
-
     # --------------------------------------------------------
-    # AUTENTICAÇÃO MERCADO LIVRE
-    #
-    # IMPORTANTE:
-    # Registro direto para garantir que:
-    #
-    # /auth/mercadolivre
-    # /auth/mercadolivre/connect
-    # /auth/callback
-    # /auth/mercadolivre/callback
-    # /api/auth/status
-    #
-    # estejam disponíveis.
+    # AUTENTICAÇÃO
     # --------------------------------------------------------
 
     register_auth_routes(
         app
     )
 
+    # --------------------------------------------------------
+    # BLUEPRINT EXISTENTE
+    # --------------------------------------------------------
 
-    logger.info(
-        "Rotas de autenticação carregadas."
+    register_existing_routes(
+        app
     )
 
-
     # --------------------------------------------------------
-    # TRATAMENTO DE ERROS
+    # ERROS
     # --------------------------------------------------------
 
     register_error_handlers(
         app
     )
 
-
     # --------------------------------------------------------
-    # OUTROS MÓDULOS
+    # LOG FINAL
     # --------------------------------------------------------
-
-    register_future_routes(
-        app
-    )
-
-
-    # --------------------------------------------------------
-    # DIAGNÓSTICO
-    # --------------------------------------------------------
-
-    try:
-
-        ml_configured = (
-            config_class
-            .mercado_livre_configured()
-        )
-
-    except Exception:
-
-        ml_configured = False
-
-
-    logger.info(
-        "Mercado Livre configurado: %s",
-        ml_configured,
-    )
-
 
     logger.info(
         "Aplicação inicializada."
     )
 
-
     return app
 
 
 # ============================================================
-# OBJETO WSGI
-#
-# O Render executa:
-#
-# gunicorn app:app
-#
-# Portanto a variável "app" precisa existir.
+# INSTÂNCIA GLOBAL PARA GUNICORN
 # ============================================================
 
 app = create_app()
 
 
 # ============================================================
-# EXECUÇÃO DIRETA
+# EXECUÇÃO LOCAL
 # ============================================================
 
 if __name__ == "__main__":
@@ -1038,23 +1002,13 @@ if __name__ == "__main__":
     port = int(
         os.getenv(
             "PORT",
-            str(
-                app.config.get(
-                    "PORT",
-                    5000,
-                )
-            ),
+            "5000",
         )
     )
 
     host = os.getenv(
         "HOST",
-        str(
-            app.config.get(
-                "HOST",
-                "0.0.0.0",
-            )
-        ),
+        "0.0.0.0",
     )
 
     app.run(
