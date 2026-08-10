@@ -3,20 +3,6 @@ Robo Ofertas PRO
 ================
 
 Núcleo da aplicação Flask.
-
-Responsabilidades deste arquivo:
-
-- criar a aplicação Flask;
-- carregar configurações;
-- inicializar extensões;
-- registrar rotas;
-- configurar segurança básica;
-- disponibilizar health check;
-- disponibilizar diagnóstico inicial;
-- tratar erros;
-- manter a aplicação preparada para crescimento.
-
-A integração completa com Mercado Livre ficará em services/.
 """
 
 from __future__ import annotations
@@ -51,9 +37,6 @@ BASE_DIR = Path(__file__).resolve().parent
 # ============================================================
 
 def configure_logging(app: Flask) -> None:
-    """
-    Configura o sistema de logs da aplicação.
-    """
 
     level_name = app.config.get(
         "LOG_LEVEL",
@@ -79,8 +62,6 @@ def configure_logging(app: Flask) -> None:
 
     logger.setLevel(level)
 
-    # Evita adicionar handlers duplicados
-    # quando a aplicação for inicializada novamente.
     if not logger.handlers:
 
         console_handler = logging.StreamHandler()
@@ -103,9 +84,6 @@ def configure_logging(app: Flask) -> None:
 # ============================================================
 
 def ensure_directories() -> None:
-    """
-    Cria os diretórios utilizados pelo projeto.
-    """
 
     directories = [
         BASE_DIR / "logs",
@@ -128,18 +106,12 @@ def ensure_directories() -> None:
 
 
 # ============================================================
-# SEGURANÇA — HEADERS
+# SEGURANÇA
 # ============================================================
 
 def register_security_headers(
     app: Flask,
 ) -> None:
-    """
-    Adiciona headers básicos de segurança às respostas.
-
-    Não substitui um firewall/WAF, mas cria uma camada
-    adicional de proteção para o aplicativo.
-    """
 
     if not app.config.get(
         "SECURITY_HEADERS_ENABLED",
@@ -191,18 +163,12 @@ def register_security_headers(
 
 
 # ============================================================
-# REQUEST ID
+# REQUEST TRACKING
 # ============================================================
 
 def register_request_tracking(
     app: Flask,
 ) -> None:
-    """
-    Adiciona um identificador simples às requisições.
-
-    Futuramente ele será utilizado no sistema de logs
-    para rastrear erros específicos.
-    """
 
     @app.before_request
     def request_started():
@@ -239,10 +205,6 @@ def register_request_tracking(
 def register_core_routes(
     app: Flask,
 ) -> None:
-    """
-    Rotas fundamentais que estarão disponíveis desde
-    a primeira versão.
-    """
 
     @app.route("/")
     def home():
@@ -264,8 +226,6 @@ def register_core_routes(
 
         except Exception:
 
-            # Durante a montagem inicial do projeto,
-            # o template pode ainda não existir.
             return jsonify(
                 ok=True,
                 app=app.config.get(
@@ -312,17 +272,62 @@ def register_core_routes(
 
         if config_class:
 
-            ml_configured = (
-                config_class.mercado_livre_configured()
-            )
+            # Compatibilidade com diferentes versões
+            # da classe Config.
 
-            ml_summary = (
-                config_class.mercado_livre_summary()
-            )
+            if hasattr(
+                config_class,
+                "mercado_livre_configured"
+            ):
 
-            security_summary = (
-                config_class.security_summary()
-            )
+                ml_configured = (
+                    config_class
+                    .mercado_livre_configured()
+                )
+
+            elif hasattr(
+                config_class,
+                "mercado_livre_configurado"
+            ):
+
+                ml_configured = (
+                    config_class
+                    .mercado_livre_configurado()
+                )
+
+            else:
+
+                ml_configured = False
+
+
+            if hasattr(
+                config_class,
+                "mercado_livre_summary"
+            ):
+
+                ml_summary = (
+                    config_class
+                    .mercado_livre_summary()
+                )
+
+            else:
+
+                ml_summary = {}
+
+
+            if hasattr(
+                config_class,
+                "security_summary"
+            ):
+
+                security_summary = (
+                    config_class
+                    .security_summary()
+                )
+
+            else:
+
+                security_summary = {}
 
         else:
 
@@ -373,22 +378,6 @@ def register_core_routes(
 def register_future_routes(
     app: Flask,
 ) -> None:
-    """
-    Local reservado para registro dos módulos.
-
-    Conforme criarmos os arquivos:
-
-        routes/auth.py
-        routes/produtos.py
-        routes/diagnostico.py
-        routes/whatsapp.py
-        routes/admin.py
-
-    eles serão registrados aqui.
-
-    O carregamento é feito de forma segura para que a aplicação
-    não quebre enquanto os módulos ainda estiverem sendo criados.
-    """
 
     modules = [
         (
@@ -442,8 +431,6 @@ def register_future_routes(
 
         except ModuleNotFoundError:
 
-            # Normal nesta fase do desenvolvimento:
-            # os módulos ainda serão criados.
             logger.debug(
                 "Módulo ainda não criado: %s",
                 module_name,
@@ -468,7 +455,7 @@ def register_future_routes(
 
 
 # ============================================================
-# TRATAMENTO 404
+# ERROS
 # ============================================================
 
 def register_error_handlers(
@@ -572,15 +559,12 @@ def register_error_handlers(
 
 
 # ============================================================
-# CONFIGURAÇÃO DA SESSÃO
+# SESSÃO
 # ============================================================
 
 def configure_session(
     app: Flask,
 ) -> None:
-    """
-    Configura cookies de sessão.
-    """
 
     app.config["SESSION_COOKIE_NAME"] = (
         app.config.get(
@@ -589,9 +573,7 @@ def configure_session(
         )
     )
 
-    app.config["SESSION_COOKIE_HTTPONLY"] = (
-        True
-    )
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
 
     app.config["SESSION_COOKIE_SAMESITE"] = (
         app.config.get(
@@ -622,9 +604,6 @@ def configure_session(
 def create_app(
     config_class=None,
 ) -> Flask:
-    """
-    Cria e configura uma instância da aplicação Flask.
-    """
 
     ensure_directories()
 
@@ -637,23 +616,13 @@ def create_app(
         instance_relative_config=True,
     )
 
-    # --------------------------------------------------------
-    # CONFIGURAÇÃO
-    # --------------------------------------------------------
-
     app.config.from_object(
         config_class
     )
 
-    # Guarda a classe para os endpoints
-    # de diagnóstico.
     app.config[
         "_ROBO_CONFIG_CLASS"
     ] = config_class
-
-    # --------------------------------------------------------
-    # LOG
-    # --------------------------------------------------------
 
     configure_logging(
         app
@@ -673,25 +642,13 @@ def create_app(
         ),
     )
 
-    # --------------------------------------------------------
-    # SESSÃO
-    # --------------------------------------------------------
-
     configure_session(
         app
     )
 
-    # --------------------------------------------------------
-    # EXTENSÕES
-    # --------------------------------------------------------
-
     init_extensions(
         app
     )
-
-    # --------------------------------------------------------
-    # SEGURANÇA
-    # --------------------------------------------------------
 
     register_security_headers(
         app
@@ -700,10 +657,6 @@ def create_app(
     register_request_tracking(
         app
     )
-
-    # --------------------------------------------------------
-    # ROTAS
-    # --------------------------------------------------------
 
     register_core_routes(
         app
@@ -717,10 +670,6 @@ def create_app(
         app
     )
 
-    # --------------------------------------------------------
-    # LOG FINAL
-    # --------------------------------------------------------
-
     logger.info(
         "Aplicação inicializada."
     )
@@ -729,12 +678,26 @@ def create_app(
 
 
 # ============================================================
+# INSTÂNCIA WSGI
+# ============================================================
+#
+# IMPORTANTE:
+# O Render executa:
+#
+#     gunicorn app:app
+#
+# Portanto, precisamos disponibilizar uma variável
+# chamada "app" neste módulo.
+#
+
+app = create_app()
+
+
+# ============================================================
 # EXECUÇÃO DIRETA
 # ============================================================
 
 if __name__ == "__main__":
-
-    application = create_app()
 
     port = int(
         os.getenv(
@@ -748,7 +711,7 @@ if __name__ == "__main__":
         "0.0.0.0",
     )
 
-    application.run(
+    app.run(
         host=host,
         port=port,
         debug=False,
